@@ -1,3 +1,5 @@
 .test/
 .claude/
 node_modules/
+.artifact/
+fonts/
