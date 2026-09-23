@@ -332,6 +332,17 @@ textarea.inp{min-height:70px;resize:vertical}
 .gate p{color:var(--ink-2);margin:0 0 14px}
 .webfoot{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:center;margin-top:40px;font-size:13px;color:var(--ink-3)}
 .webfoot .sep{color:var(--line-2)}
+.gate .step{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.gate .step ol{margin:0;padding-left:18px}
+.gate:has(#setup){max-width:560px}
+.acct-list{display:grid;gap:0;border-top:1px solid var(--line);margin:8px 0}
+.acct{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.acct-who{display:flex;gap:8px;align-items:center}
+.acct-do{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.acct-do .inp{width:170px}
+.role{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-radius:999px;padding:2px 8px;border:1px solid var(--line-2);color:var(--ink-2)}
+.role.editor{border-color:var(--accent);color:var(--accent)}
+.acct-add .inp{max-width:200px}
 .panel h4.subh{margin:18px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(16px + env(safe-area-inset-top,0px));z-index:60;background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;box-shadow:var(--shadow);font-weight:600;font-size:14px;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){
@@ -640,7 +651,7 @@ function editable(){return canWrite&&!ui.preview;}
 
 /* ---------- Render: shell ---------- */
 function render(){
-  if(WEB&&!(web.state==='ready'||(web.state==='setup'&&canWrite))){$('#app').innerHTML=gateHTML();return;}
+  if(WEB&&web.state!=='ready'){$('#app').innerHTML=gateHTML();return;}
   var hT=H.fromAbs(TODAY);
   var h='';
   h+='<div class="wrap">';
@@ -662,8 +673,6 @@ function render(){
   if(ui.view==='calendar'&&ui.pdfMenu&&!exporting) h+=pdfMenuHTML();
   if(editable()&&ui.panel==='share') h+=sharePanel();
   if(editable()&&ui.panel==='settings') h+=settingsPanel();
-  if(WEB&&ui.panel==='owner') h+=ownerPanel();
-  if(WEB&&web.state==='setup'&&editable()&&ui.panel!=='settings') h+='<div class="banner"><span><b>The website isn’t published yet.</b> Import your family data (Settings → Import a data file) or edit here, then set the family password in Settings. Saving encrypts the data and publishes it.</span><button class="btn sm" data-act="panel" data-p="settings">Open Settings</button></div>';
   if(editable()&&data.meta.example&&!ui.panel) h+='<div class="banner"><span><b>This is an example family</b> so you can see how everything works. Replace it with your own when you’re ready.</span><button class="btn sm" data-act="panel" data-p="settings">Start my own family</button></div>';
   h+='<main id="view">'+renderView()+'</main>';
   h+=webFooter();
@@ -686,10 +695,7 @@ function settingsPanel(){
   h+='<button class="btn sm ghost" data-act="panel" data-p="">Close</button></div>';
   h+='<h4 class="subh">Backup</h4><p>Download all the family data as a file, or load a file saved earlier. This is also how you move data between the Claude version and the website.</p>';
   h+='<div class="row"><button class="btn sm" data-act="export-data">Download data file</button><button class="btn sm" data-act="import-data">Import a data file…</button><input type="file" id="import-file" accept=".json,application/json" hidden></div>';
-  if(WEB){
-    h+='<h4 class="subh">Family password</h4><p>'+(cry.key?'Family members type this password to open the calendar. If you change it, everyone needs the new one.':'Set the password family members will type to open the calendar. The data is encrypted with it before it goes to GitHub.')+'</p>';
-    h+='<div class="row"><input class="inp" id="pw1" type="password" autocomplete="new-password" placeholder="New family password" style="max-width:240px"><input class="inp" id="pw2" type="password" autocomplete="new-password" placeholder="Type it again" style="max-width:240px"><button class="btn sm primary" data-act="set-pw">'+(cry.key?'Change password and save':'Set password and save')+'</button></div>';
-  }
+  h+=accountsHTML();
   if(ui.clearAsk) h+='<div class="row"><div class="confirm">Remove all '+data.people.length+' people and their dates? You can still discard this before saving. <button class="btn sm danger" data-act="clear-yes">Remove all</button><button class="btn sm ghost" data-act="clear-no">Keep them</button></div></div>';
   h+='</section>';
   return h;
@@ -1709,173 +1715,268 @@ function exportPDF(opts){
 window.flMakePdf=makePdf;
 
 /* ---------- Website mode (GitHub Pages) ----------
-   Outside Claude the page runs as an ordinary website. The family data lives in family.enc.json next to
-   the page, encrypted with the family password (AES-256-GCM; key from PBKDF2-SHA256), so the public
-   repository never holds readable family data. The owner signs in with a GitHub access token that stays
-   in their browser; Save then encrypts the data and commits the file. */
+   Outside Claude the page runs as an ordinary website with username + password sign-in.
+   family.enc.json holds everything, and nothing in it is readable without a password:
+   - data:  the family data, encrypted with a random family key (AES-256-GCM).
+   - admin: the GitHub key used for saving + the list of accounts, encrypted with a random editor key.
+   - users: one entry per person; their password (PBKDF2-SHA256) unlocks the family key, and for
+            editors the editor key too. Usernames are stored only as hashes.
+   Viewers can read; editors can also save and manage accounts. The GitHub key is made once by the
+   first editor during setup and never needs to be typed again until it expires. */
 var WEB=!(window.claude&&typeof window.claude.use==='function');
-var GH_DEFAULT={owner:'RiseNJ-YF',repo:'family-luach',branch:'main'};
+var SITE=(function(){
+  var h=location.hostname,m=/^([^.]+)\.github\.io$/i.exec(h),seg=location.pathname.split('/').filter(Boolean)[0];
+  return {owner:m?m[1]:'RiseNJ-YF',repo:m&&seg&&!/\.html?$/i.test(seg)?seg:'family-luach',branch:'main'};
+})();
 var DATA_FILE='family.enc.json',KDF_ITER=310000;
-var web={state:WEB?'loading':'off',err:'',title:'',enc:null};
-var gh=lsGet('fl-gh',null);
-var cry={key:null,salt:null,iter:KDF_ITER};
-function ghReady(){return !!(gh&&gh.token);}
+var TOKEN_URL='https://github.com/settings/personal-access-tokens/new?name=Family+Luach+site&description=Lets+Family+Luach+editors+save+changes&target_name='+encodeURIComponent(SITE.owner)+'&expires_in=none&contents=write';
+var web={state:WEB?'loading':'off',err:'',title:'',enc:null,role:null,me:'',busy:false,msg:''};
+var keys={dk:null,ek:null},admin=null;
 function b64(buf){var b=new Uint8Array(buf),s='';for(var i=0;i<b.length;i+=8192) s+=String.fromCharCode.apply(null,b.subarray(i,i+8192));return btoa(s);}
 function unb64(s){var bin=atob(s),b=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++) b[i]=bin.charCodeAt(i);return b;}
-function utf8b64(str){return b64(new TextEncoder().encode(str));}
-function deriveKey(pw,salt,iter){
+function rnd(n){return crypto.getRandomValues(new Uint8Array(n));}
+function userHash(name){return crypto.subtle.digest('SHA-256',new TextEncoder().encode('family-luach:'+name.trim().toLowerCase())).then(function(d){return b64(d);});}
+function newKey(){return crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt','decrypt']);}
+function rawKey(k){return crypto.subtle.exportKey('raw',k).then(b64);}
+function useKey(raw){return crypto.subtle.importKey('raw',unb64(raw),{name:'AES-GCM'},true,['encrypt','decrypt']);}
+function pwKey(pw,salt,iter){
   return crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']).then(function(base){
-    return crypto.subtle.deriveKey({name:'PBKDF2',salt:unb64(salt),iterations:iter,hash:'SHA-256'},base,{name:'AES-GCM',length:256},true,['encrypt','decrypt']);
+    return crypto.subtle.deriveKey({name:'PBKDF2',salt:unb64(salt),iterations:iter,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
   });
 }
-function encryptData(obj){
-  var iv=crypto.getRandomValues(new Uint8Array(12));
-  return crypto.subtle.encrypt({name:'AES-GCM',iv:iv},cry.key,new TextEncoder().encode(JSON.stringify(obj))).then(function(ct){
-    return {app:'family-luach',v:1,title:obj.meta.familyName,kdf:'PBKDF2-SHA256',iter:cry.iter,salt:cry.salt,alg:'AES-256-GCM',iv:b64(iv),ct:b64(ct)};
+function seal(key,obj){var iv=rnd(12);return crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,new TextEncoder().encode(JSON.stringify(obj))).then(function(ct){return {iv:b64(iv),ct:b64(ct)};});}
+function unseal(key,box){return crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(box.iv)},key,unb64(box.ct)).then(function(pt){return JSON.parse(new TextDecoder().decode(pt));});}
+/* One account entry: the person's password unlocks the family key (and the editor key for editors). */
+function makeUser(name,pw,role){
+  var salt=b64(rnd(16));
+  return Promise.all([userHash(name),pwKey(pw,salt,KDF_ITER),rawKey(keys.dk),role==='editor'?rawKey(keys.ek):null]).then(function(r){
+    var secret={dk:r[2]};if(r[3]) secret.ek=r[3];
+    return seal(r[1],secret).then(function(box){return {h:r[0],role:role,salt:salt,iv:box.iv,ct:box.ct};});
   });
 }
-function decryptData(key,enc){return crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(enc.iv)},key,unb64(enc.ct)).then(function(pt){return JSON.parse(new TextDecoder().decode(pt));});}
-function rememberKey(){return crypto.subtle.exportKey('raw',cry.key).then(function(raw){lsSet('fl-key',{salt:cry.salt,iter:cry.iter,raw:b64(raw)});});}
-function ghApi(path,opts){
+function ghApi(path,token,opts){
   opts=opts||{};
   return fetch('https://api.github.com'+path,{method:opts.method||'GET',cache:'no-store',
-    headers:{'Authorization':'Bearer '+gh.token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},
+    headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'},
     body:opts.body?JSON.stringify(opts.body):undefined})
   .then(function(r){return r.json().catch(function(){return {};}).then(function(j){if(!r.ok){var e=new Error(j.message||('GitHub error '+r.status));e.status=r.status;throw e;}return j;});});
 }
-function ghFilePath(){return '/repos/'+encodeURIComponent(gh.owner)+'/'+encodeURIComponent(gh.repo)+'/contents/'+DATA_FILE;}
-/* The owner reads the file straight from GitHub (always current); family members read the published copy. */
-function loadEnc(){
-  if(ghReady()) return ghApi(ghFilePath()+'?ref='+encodeURIComponent(gh.branch)).then(function(j){return JSON.parse(new TextDecoder().decode(unb64(j.content.replace(/\s/g,''))));},function(e){if(e.status===404) return null;throw e;});
-  return fetch(DATA_FILE+'?t='+Date.now(),{cache:'no-store'}).then(function(r){if(r.status===404) return null;if(!r.ok) throw new Error('The family data couldn’t be loaded ('+r.status+'). Check your connection and try again.');return r.json();});
+function repoPath(){return '/repos/'+encodeURIComponent(SITE.owner)+'/'+encodeURIComponent(SITE.repo);}
+function checkToken(token){
+  return ghApi(repoPath(),token).then(function(j){
+    if(!(j.permissions&&j.permissions.push)) throw new Error('That GitHub key can read the site but can’t save to it. It needs Contents: Read and write.');
+  },function(e){
+    throw new Error(e.status===401?'GitHub didn’t accept that key. Copy it again — it starts with github_pat_.':e.status===404?'That key doesn’t have access to the '+SITE.repo+' repository.':(e.message||String(e)));
+  });
 }
-function openData(d){
-  saved=normalize(d);data=JSON.parse(JSON.stringify(saved));reindex();dirty=false;web.state='ready';web.err='';
-  canWrite=ghReady();if(canWrite) restorePending();renderAll();
+/* Write family.enc.json to GitHub (editors only). */
+function commitFile(file,msg,token){
+  var p=repoPath()+'/contents/'+DATA_FILE,tk=token||(admin&&admin.token);
+  return ghApi(p+'?ref='+SITE.branch,tk).then(function(j){return j.sha;},function(e){if(e.status===404) return null;throw e;}).then(function(sha){
+    var body={message:msg,content:b64(new TextEncoder().encode(JSON.stringify(file,null,1))),branch:SITE.branch};
+    if(sha) body.sha=sha;
+    return ghApi(p,tk,{method:'PUT',body:body});
+  }).then(function(){web.enc=file;web.title=file.title;});
+}
+function saveErr(e){
+  return e.status===401?'The site’s GitHub key has expired or was removed. An editor can paste a new one in Settings → GitHub key.':
+    (e.status===403||e.status===404)?'The site’s GitHub key can’t save anymore. An editor can paste a new one in Settings → GitHub key.':
+    e.status===409?'The data changed on GitHub meanwhile. Reload the page — your edits are kept.':
+    'Couldn’t save: '+(e.message||e);
+}
+/* Build the whole file from the current keys: family data, optionally new accounts / admin info. */
+function buildFile(d,users,adm){
+  return Promise.all([seal(keys.dk,d),seal(keys.ek,adm||admin)]).then(function(r){
+    return {app:'family-luach',v:2,title:d.meta.familyName,iter:KDF_ITER,users:users||web.enc.users,data:r[0],admin:r[1]};
+  });
+}
+function loadEnc(){
+  return fetch(DATA_FILE+'?t='+Date.now(),{cache:'no-store'}).then(function(r){
+    if(r.status===404) return null;
+    if(!r.ok) throw new Error('The family data couldn’t be loaded ('+r.status+'). Check your connection and try again.');
+    return r.json();
+  });
+}
+/* After signing in (or a remembered session): read the data, and for editors the admin info. */
+function openWithKeys(){
+  return unseal(keys.dk,web.enc.data).then(function(d){
+    if(!keys.ek) return d;
+    return unseal(keys.ek,web.enc.admin).then(function(a){admin=a;return d;});
+  }).then(function(d){
+    saved=normalize(d);data=JSON.parse(JSON.stringify(saved));reindex();dirty=false;
+    web.state='ready';web.err='';canWrite=web.role==='editor';
+    if(canWrite) restorePending();
+    renderAll();
+  });
 }
 function webBoot(){
   web.state='loading';render();
   loadEnc().then(function(enc){
     web.enc=enc;
-    if(!enc){web.state='setup';canWrite=ghReady();renderAll();return;}
+    if(!enc){web.state='empty';render();return;}
     web.title=enc.title||'';
-    var k=lsGet('fl-key',null);
-    if(k&&k.salt===enc.salt){
-      return crypto.subtle.importKey('raw',unb64(k.raw),{name:'AES-GCM'},true,['encrypt','decrypt']).then(function(key){
-        return decryptData(key,enc).then(function(d){cry={key:key,salt:enc.salt,iter:enc.iter};openData(d);});
-      }).catch(function(){try{localStorage.removeItem('fl-key');}catch(e){}web.state='locked';render();});
-    }
-    web.state='locked';render();
-  }).catch(function(e){
-    web.state='error';
-    web.err=e.status===401?'GitHub didn’t accept the saved owner token. Sign in again below.':(e.message||String(e));
-    render();
-  });
+    var s=lsGet('fl-session',null),u=s&&enc.users.filter(function(x){return x.h===s.h;})[0];
+    if(!u||u.role!==s.role){try{localStorage.removeItem('fl-session');}catch(e){}web.state='login';render();return;}
+    return Promise.all([useKey(s.dk),s.ek?useKey(s.ek):null]).then(function(k){
+      keys={dk:k[0],ek:k[1]};web.role=s.role;web.me=s.name||'';
+      return openWithKeys();
+    }).catch(function(){try{localStorage.removeItem('fl-session');}catch(e){}keys={dk:null,ek:null};web.state='login';render();});
+  }).catch(function(e){web.state='error';web.err=e.message||String(e);render();});
 }
-function unlock(){
-  var pw=$('#fam-pw').value,remember=$('#fam-remember').checked,enc=web.enc;
-  if(!pw){web.err='Type the family password.';render();return;}
+function signIn(){
+  var name=$('#li-user').value.trim(),pw=$('#li-pw').value,remember=$('#li-remember').checked,enc=web.enc,fail='That username and password don’t match. Check both and try again.';
+  if(!name||!pw){web.err='Type your username and password.';render();return;}
   web.err='';web.busy=true;render();
-  deriveKey(pw,enc.salt,enc.iter).then(function(key){
-    return decryptData(key,enc).then(function(d){
-      cry={key:key,salt:enc.salt,iter:enc.iter};web.busy=false;
-      if(remember) rememberKey();
-      openData(d);
+  userHash(name).then(function(h){
+    var u=enc.users.filter(function(x){return x.h===h;})[0];
+    if(!u) throw new Error(fail);
+    return pwKey(pw,u.salt,enc.iter).then(function(k){return unseal(k,u);}).catch(function(){throw new Error(fail);}).then(function(secret){
+      return Promise.all([useKey(secret.dk),secret.ek?useKey(secret.ek):null]).then(function(k){
+        keys={dk:k[0],ek:k[1]};web.role=u.role;web.me=name;
+        if(remember) lsSet('fl-session',{h:h,role:u.role,name:name,dk:secret.dk,ek:secret.ek||null});
+        web.busy=false;return openWithKeys();
+      });
     });
-  }).catch(function(){web.busy=false;web.err='That password didn’t open the calendar. Check it and try again.';render();var f=$('#fam-pw');if(f) f.focus();});
+  }).catch(function(e){web.busy=false;web.err=e.message===fail?fail:'Couldn’t open the calendar: '+(e.message||e);render();var f=$('#li-pw');if(f) f.focus();});
 }
-function setFamilyPassword(){
-  var a=$('#pw1').value,b=$('#pw2').value;
-  if(a.length<6){toast('Use at least 6 characters for the family password.');return;}
-  if(a!==b){toast('The two passwords don’t match.');return;}
-  var salt=b64(crypto.getRandomValues(new Uint8Array(16)));
-  deriveKey(a,salt,KDF_ITER).then(function(key){cry={key:key,salt:salt,iter:KDF_ITER};return rememberKey();})
-    .then(function(){ui.panel=null;toast('Family password set — saving…');webSave();});
+function signOut(){try{localStorage.removeItem('fl-session');sessionStorage.removeItem(PKEY);}catch(e){}location.reload();}
+/* First-time setup by the first editor. */
+function runSetup(){
+  var fam=$('#su-family').value.trim()||'Our Family',name=$('#su-user').value.trim(),pw=$('#su-pw').value,pw2=$('#su-pw2').value,token=$('#su-token').value.trim();
+  var file=$('#su-file').files&&$('#su-file').files[0];
+  if(!name){web.err='Choose a username for yourself.';render();return;}
+  if(pw.length<6){web.err='Use at least 6 characters for your password.';render();return;}
+  if(pw!==pw2){web.err='The two passwords don’t match.';render();return;}
+  if(!token){web.err='Paste the GitHub key (step 1).';render();return;}
+  web.err='';web.busy=true;web.msg='Checking the GitHub key…';render();
+  var startData=file?new Promise(function(res,rej){var r=new FileReader();r.onload=function(){try{var j=JSON.parse(r.result),d=j&&j.data&&j.data.people?j.data:j;if(!d||!Array.isArray(d.people)) throw 0;res(normalize(d));}catch(e){rej(new Error('That file isn’t a Family Luach data file.'));}};r.readAsText(file);}):Promise.resolve(normalize(JSON.parse($('#family-data').textContent)));
+  checkToken(token).then(function(){return startData;}).then(function(d){
+    if(!file||d.meta.example){d.meta.familyName=fam;}
+    web.msg='Encrypting and publishing…';render();
+    return Promise.all([newKey(),newKey()]).then(function(k){
+      keys={dk:k[0],ek:k[1]};
+      return makeUser(name,pw,'editor').then(function(me){
+        var adm={token:token,roster:[{name:name,role:'editor',h:me.h}]};admin=adm;
+        return buildFile(d,[me],adm).then(function(f){return commitFile(f,'Set up Family Luach',token);}).then(function(){
+          return Promise.all([rawKey(keys.dk),rawKey(keys.ek)]).then(function(r){lsSet('fl-session',{h:me.h,role:'editor',name:name,dk:r[0],ek:r[1]});});
+        }).then(function(){web.role='editor';web.me=name;web.busy=false;web.msg='';return openWithKeys();}).then(function(){ui.panel='settings';render();toast('Your family site is set up. Add family members in Settings → People.');});
+      });
+    });
+  }).catch(function(e){web.busy=false;web.msg='';web.err=e.message||String(e);render();});
 }
 function webSave(){
-  if(!ghReady()){ui.panel='owner';render();toast('Sign in as the owner to save.');return;}
-  if(!cry.key){ui.panel='settings';render();toast('Set the family password first — the data is encrypted with it.');return;}
+  if(web.role!=='editor'||!admin){toast('Only editors can save.');return;}
   saving=true;render();
-  var path=ghFilePath();
-  ghApi(path+'?ref='+encodeURIComponent(gh.branch)).then(function(j){return j.sha;},function(e){if(e.status===404) return null;throw e;})
-  .then(function(sha){
-    return encryptData(data).then(function(p){
-      var body={message:'Update family data',content:utf8b64(JSON.stringify(p,null,1)),branch:gh.branch};
-      if(sha) body.sha=sha;
-      return ghApi(path,{method:'PUT',body:body}).then(function(){web.enc=p;web.title=p.title;});
-    });
-  })
-  .then(function(){
-    saving=false;saved=JSON.parse(JSON.stringify(data));dirty=false;web.state='ready';
+  buildFile(data).then(function(f){return commitFile(f,'Update family data');}).then(function(){
+    saving=false;saved=JSON.parse(JSON.stringify(data));dirty=false;
     try{sessionStorage.removeItem(PKEY);}catch(e){}
-    renderAll();toast('Saved. Family members see it within a minute or two.');
-  },function(e){
-    saving=false;render();
-    toast(e.status===401?'GitHub didn’t accept the access token. Sign in again.':
-      (e.status===403||e.status===404)?'This token can’t write to '+gh.owner+'/'+gh.repo+'. Check its repository access and Contents permission.':
-      e.status===409?'The data changed on GitHub meanwhile. Reload the page — your edits are kept.':
-      'Couldn’t save: '+(e.message||e));
+    renderAll();toast('Saved. Everyone sees it within a minute or two.');
+  },function(e){saving=false;render();toast(saveErr(e));});
+}
+/* Account changes are saved straight away, with the last saved family data. */
+function saveAccounts(users,roster,msg,done){
+  var adm=Object.assign({},admin,{roster:roster});
+  web.busy=true;render();
+  buildFile(saved,users,adm).then(function(f){return commitFile(f,msg);}).then(function(){admin=adm;web.busy=false;ui.acctErr='';render();toast(done);},
+    function(e){web.busy=false;ui.acctErr=saveErr(e);render();});
+}
+function acctAdd(){
+  var name=$('#ac-user').value.trim(),pw=$('#ac-pw').value,role=$('#ac-role').value;
+  if(!name){ui.acctErr='Type a username.';render();return;}
+  if(pw.length<6){ui.acctErr='Use at least 6 characters for the password.';render();return;}
+  userHash(name).then(function(h){
+    if(web.enc.users.some(function(u){return u.h===h;})){ui.acctErr='There’s already someone called “'+name+'”.';render();return;}
+    return makeUser(name,pw,role).then(function(u){
+      saveAccounts(web.enc.users.concat([u]),admin.roster.concat([{name:name,role:role,h:u.h}]),'Add '+role+' account',name+' can now sign in as '+(role==='editor'?'an editor':'a viewer')+'.');
+    });
   });
 }
-function ownerSignIn(){
-  var g={owner:$('#gh-owner').value.trim(),repo:$('#gh-repo').value.trim(),branch:$('#gh-branch').value.trim()||'main',token:$('#gh-token').value.trim()};
-  if(!g.owner||!g.repo||!g.token){web.ownerErr='Fill in the account, repository and access token.';render();return;}
-  web.ownerErr='';web.ownerBusy=true;render();
-  var prev=gh;gh=g;
-  ghApi('/repos/'+encodeURIComponent(g.owner)+'/'+encodeURIComponent(g.repo)).then(function(j){
-    if(!(j.permissions&&j.permissions.push)){var e=new Error('This token can read the repository but can’t write to it. Give it Contents: Read and write.');e.status=0;throw e;}
-    lsSet('fl-gh',g);web.ownerBusy=false;ui.panel=null;toast('Signed in. Edit controls are on in this browser.');webBoot();
-  }).catch(function(e){
-    gh=prev;web.ownerBusy=false;
-    web.ownerErr=e.status===401?'GitHub didn’t accept that token.':e.status===404?'Repository not found, or the token has no access to it.':(e.message||String(e));
-    render();
+function acctReset(h){
+  var r=admin.roster.filter(function(x){return x.h===h;})[0],inp=$('#rp-'+admin.roster.indexOf(r)),pw=inp?inp.value:'';
+  if(!r) return;
+  if(pw.length<6){ui.acctErr='Use at least 6 characters for '+r.name+'’s new password.';render();return;}
+  makeUser(r.name,pw,r.role).then(function(u){
+    saveAccounts(web.enc.users.map(function(x){return x.h===h?u:x;}),admin.roster,'Reset a password','New password set for '+r.name+'.');
   });
 }
-function ownerSignOut(){try{localStorage.removeItem('fl-gh');}catch(e){}gh=null;canWrite=false;ui.panel=null;webBoot();toast('Signed out in this browser.');}
-function lockDevice(){try{localStorage.removeItem('fl-key');}catch(e){}location.reload();}
-function ownerPanel(){
-  var g=gh||GH_DEFAULT,h='<section class="panel"><h3>Owner sign-in</h3>';
-  if(ghReady()){
-    h+='<p>This browser is signed in for <b>'+esc(gh.owner+'/'+gh.repo)+'</b>. Save writes the encrypted family data there.</p>';
-    h+='<div class="row"><button class="btn sm danger" data-act="owner-signout">Sign out in this browser</button><button class="btn sm ghost" data-act="panel" data-p="">Close</button></div>';
-    return h+'</section>';
-  }
-  h+='<p>Only the person who keeps this calendar up to date needs this. Family members just use the family password.</p>';
-  h+='<div class="fgrid"><div class="field"><label for="gh-owner">GitHub account</label><input class="inp" id="gh-owner" value="'+esc(g.owner)+'" autocomplete="off"></div><div class="field"><label for="gh-repo">Repository</label><input class="inp" id="gh-repo" value="'+esc(g.repo)+'" autocomplete="off"></div></div>';
-  h+='<div class="fgrid" style="margin-top:10px"><div class="field"><label for="gh-branch">Branch</label><input class="inp" id="gh-branch" value="'+esc(g.branch||'main')+'" autocomplete="off"></div><div class="field"><label for="gh-token">Access token</label><input class="inp" id="gh-token" type="password" autocomplete="off" spellcheck="false"></div></div>';
-  h+='<p class="note">Make the token at github.com → Settings → Developer settings → Personal access tokens → Fine-grained tokens. Repository access: only <b>'+esc(g.repo)+'</b>. Repository permissions: <b>Contents → Read and write</b>. It’s stored only in this browser.</p>';
-  if(web.ownerErr) h+='<p class="err">'+esc(web.ownerErr)+'</p>';
-  h+='<div class="row"><button class="btn sm primary" data-act="owner-signin"'+(web.ownerBusy?' disabled':'')+'>'+(web.ownerBusy?'Checking…':'Sign in')+'</button><button class="btn sm ghost" data-act="panel" data-p="">Close</button></div>';
-  return h+'</section>';
+function acctRemove(h){
+  var r=admin.roster.filter(function(x){return x.h===h;})[0];
+  var editors=admin.roster.filter(function(x){return x.role==='editor';});
+  if(r&&r.role==='editor'&&editors.length<2){ui.acctErr='Keep at least one editor.';ui.rmAsk=null;render();return;}
+  ui.rmAsk=null;
+  saveAccounts(web.enc.users.filter(function(x){return x.h!==h;}),admin.roster.filter(function(x){return x.h!==h;}),'Remove account',(r?r.name:'That person')+' can no longer sign in.');
+}
+function tokenUpdate(){
+  var t=$('#tk-new').value.trim();
+  if(!t){ui.acctErr='Paste the new GitHub key.';render();return;}
+  web.busy=true;render();
+  checkToken(t).then(function(){
+    var adm=Object.assign({},admin,{token:t});
+    return buildFile(saved,null,adm).then(function(f){return commitFile(f,'Update GitHub key',t);}).then(function(){admin=adm;web.busy=false;ui.acctErr='';render();toast('GitHub key updated. Saving works again.');});
+  }).catch(function(e){web.busy=false;ui.acctErr=e.message||String(e);render();});
+}
+function accountsHTML(){
+  if(!WEB||web.role!=='editor'||!admin) return '';
+  var h='<h4 class="subh">People who can sign in</h4><p>Viewers can look at everything. Editors can also change the family data and manage this list. You choose each person’s password here and tell it to them.</p>';
+  h+='<div class="acct-list">';
+  admin.roster.forEach(function(r,i){
+    var me=r.name.toLowerCase()===web.me.toLowerCase();
+    h+='<div class="acct"><div class="acct-who"><b>'+esc(r.name)+'</b><span class="role '+r.role+'">'+(r.role==='editor'?'Editor':'Viewer')+'</span>'+(me?'<span class="note">you</span>':'')+'</div>';
+    h+='<div class="acct-do"><input class="inp" id="rp-'+i+'" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-reset" data-h="'+esc(r.h)+'">'+(me?'Change my password':'Set password')+'</button>';
+    if(ui.rmAsk===r.h) h+='<span class="confirm">Remove '+esc(r.name)+'? <button class="btn sm danger" data-act="acct-remove" data-h="'+esc(r.h)+'">Remove</button><button class="btn sm ghost" data-act="acct-rm-no">Keep</button></span>';
+    else if(!me) h+='<button class="btn sm ghost" data-act="acct-rm-ask" data-h="'+esc(r.h)+'">Remove</button>';
+    h+='</div></div>';
+  });
+  h+='</div><div class="row acct-add"><input class="inp" id="ac-user" placeholder="Username" autocomplete="off"><input class="inp" id="ac-pw" type="password" placeholder="Password" autocomplete="new-password"><select class="sel" id="ac-role"><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button class="btn sm primary" data-act="acct-add"'+(web.busy?' disabled':'')+'>Add person</button></div>';
+  if(ui.acctErr) h+='<p class="err">'+esc(ui.acctErr)+'</p>';
+  h+='<p class="note">Removing someone stops them from signing in. A device where they chose “Remember me” keeps what it already downloaded.</p>';
+  h+='<h4 class="subh">GitHub key</h4><p>Saving uses a GitHub key you made during setup. You only need this if saving stops working because the key expired.</p>';
+  h+='<div class="row"><input class="inp" id="tk-new" type="password" placeholder="Paste a new GitHub key" autocomplete="off" style="max-width:320px"><button class="btn sm" data-act="token-update"'+(web.busy?' disabled':'')+'>Update key</button><a class="linkbtn" href="'+TOKEN_URL+'" target="_blank" rel="noopener">Make a new key on GitHub</a></div>';
+  return h;
 }
 function webFooter(){
   if(!WEB) return '';
   var bits=['<span>Family Luach</span>'];
-  bits.push('<button class="linkbtn" data-act="panel" data-p="owner">'+(ghReady()?'Owner: signed in':'Owner sign-in')+'</button>');
-  if(lsGet('fl-key',null)) bits.push('<button class="linkbtn" data-act="lock-device">Forget the password on this device</button>');
+  if(web.state==='ready') bits.push('<span>Signed in as '+esc(web.me||'family')+' · '+(web.role==='editor'?'Editor':'Viewer')+'</span>','<button class="linkbtn" data-act="sign-out">Sign out</button>');
   return '<footer class="webfoot">'+bits.join('<span class="sep">·</span>')+'</footer>';
 }
 function gateHTML(){
   var h='<div class="wrap"><div class="gate">';
   if(web.state==='loading') h+='<p class="note">Loading the family calendar…</p>';
   else if(web.state==='error') h+='<h1>Family Luach</h1><p>'+esc(web.err)+'</p><div><button class="btn sm" data-act="reload">Try again</button></div>';
-  else if(web.state==='locked'){
-    h+='<h1>'+esc(web.title||'Family Luach')+'</h1><p>This family calendar is private. Enter the family password to open it.</p>';
-    h+='<form id="unlock" class="form" style="gap:12px"><input type="text" name="username" value="family" autocomplete="username" hidden>';
-    h+='<div class="field"><label for="fam-pw">Family password</label><input class="inp" id="fam-pw" type="password" autocomplete="current-password"></div>';
-    h+='<label class="check"><input type="checkbox" id="fam-remember" checked>Remember on this device</label>';
+  else if(web.state==='login'){
+    h+='<h1>'+esc(web.title||'Family Luach')+'</h1><p>Sign in with the username and password you were given.</p>';
+    h+='<form id="login" class="form" style="gap:12px">';
+    h+='<div class="field"><label for="li-user">Username</label><input class="inp" id="li-user" autocomplete="username" autocapitalize="off" spellcheck="false"></div>';
+    h+='<div class="field"><label for="li-pw">Password</label><input class="inp" id="li-pw" type="password" autocomplete="current-password"></div>';
+    h+='<label class="check"><input type="checkbox" id="li-remember" checked>Remember me on this device</label>';
     if(web.err) h+='<p class="err">'+esc(web.err)+'</p>';
-    h+='<div><button class="btn primary" type="submit"'+(web.busy?' disabled':'')+'>'+(web.busy?'Opening…':'Open the calendar')+'</button></div></form>';
-  } else h+='<h1>Family Luach</h1><p>This family calendar hasn’t been set up yet. Check back soon.</p>';
-  h+='</div>'+(ui.panel==='owner'?ownerPanel():'')+webFooter()+'</div>';
+    h+='<div><button class="btn primary" type="submit"'+(web.busy?' disabled':'')+'>'+(web.busy?'Signing in…':'Sign in')+'</button></div></form>';
+    h+='<p class="note" style="margin-top:14px">Forgot your password? Ask an editor in the family to set a new one.</p>';
+  } else if(web.state==='setup'){
+    h+='<h1>Set up your family site</h1><p>You’re the first editor. This takes a few minutes, once.</p><form id="setup" class="form" style="gap:14px">';
+    h+='<div class="step"><b>1. Make a GitHub key</b> so the site can save. <a class="linkbtn" href="'+TOKEN_URL+'" target="_blank" rel="noopener">Open GitHub to make the key</a>';
+    h+='<ol class="note"><li>Repository access: <b>Only select repositories</b> → <b>'+esc(SITE.repo)+'</b>.</li><li>Permissions → Repository → <b>Contents: Read and write</b>.</li><li>Expiration: the longest offered.</li><li>Click <b>Generate token</b> and copy it.</li></ol>';
+    h+='<div class="field"><label for="su-token">Paste the key here</label><input class="inp" id="su-token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></div></div>';
+    h+='<div class="step"><b>2. Your sign-in</b><div class="field"><label for="su-user">Your username</label><input class="inp" id="su-user" autocomplete="username" autocapitalize="off" spellcheck="false"></div>';
+    h+='<div class="fgrid"><div class="field"><label for="su-pw">Password</label><input class="inp" id="su-pw" type="password" autocomplete="new-password"></div><div class="field"><label for="su-pw2">Type it again</label><input class="inp" id="su-pw2" type="password" autocomplete="new-password"></div></div></div>';
+    h+='<div class="step"><b>3. Your family</b><div class="field"><label for="su-family">Family name (page heading)</label><input class="inp" id="su-family" value="Our Family"></div>';
+    h+='<div class="field"><label for="su-file">Data file from the Claude version (optional)</label><input id="su-file" type="file" accept=".json,application/json"><span class="note">In Claude: Settings → Download data file. Leave empty to start with the example family.</span></div></div>';
+    if(web.err) h+='<p class="err">'+esc(web.err)+'</p>';
+    if(web.msg) h+='<p class="note">'+esc(web.msg)+'</p>';
+    h+='<div><button class="btn primary" type="submit"'+(web.busy?' disabled':'')+'>'+(web.busy?'Working…':'Create the family site')+'</button> <button class="btn ghost" type="button" data-act="setup-cancel">Cancel</button></div></form>';
+  } else {
+    h+='<h1>Family Luach</h1><p>This family calendar hasn’t been set up yet.</p><div><button class="btn sm" data-act="setup-open">Set it up (first editor)</button></div>';
+  }
+  h+='</div>'+webFooter()+'</div>';
   return h;
 }
 function webSharePanel(){
   var url=location.origin+location.pathname;
-  return '<section class="panel"><h3>Share with family</h3><p>Send your family this address and the family password:</p>'+
+  return '<section class="panel"><h3>Share with family</h3><p>Send each person this address together with their username and password (add people in Settings → People who can sign in):</p>'+
   '<div class="row"><b class="copyable">'+esc(url)+'</b><button class="btn sm" data-act="copy-url">Copy address</button></div>'+
-  '<p>They type the password once on each device. Only a browser signed in as the owner sees edit controls.</p>'+
-  '<div class="row"><button class="btn sm" data-act="preview">Preview what family members see</button><button class="btn sm ghost" data-act="panel" data-p="">Close</button></div></section>';
+  '<p>Viewers can look at everything; only editors see the edit controls.</p>'+
+  '<div class="row"><button class="btn sm" data-act="preview">Preview what viewers see</button><button class="btn sm ghost" data-act="panel" data-p="">Close</button></div></section>';
 }
 /* Files to the viewer: Claude's download prompt inside Claude, an ordinary download on the website. */
 function saveFile(name,content,type){
@@ -1959,11 +2060,16 @@ document.addEventListener('click',function(e){
     case 'pdf':
       var ws=$('#wall-size');if(ws) lsSet('fl-wall',ws.value);
       ui.pdfMenu=false;exportPDF({kind:t.dataset.kind,size:ws?ws.value:lsGet('fl-wall','24x36')});break;
-    case 'owner-signin':ownerSignIn();break;
-    case 'owner-signout':ownerSignOut();break;
-    case 'lock-device':lockDevice();break;
+    case 'sign-out':signOut();break;
     case 'reload':location.reload();break;
-    case 'set-pw':setFamilyPassword();break;
+    case 'setup-open':web.state='setup';web.err='';render();break;
+    case 'setup-cancel':web.state='empty';web.err='';render();break;
+    case 'acct-add':acctAdd();break;
+    case 'acct-reset':acctReset(t.dataset.h);break;
+    case 'acct-rm-ask':ui.rmAsk=t.dataset.h;render();break;
+    case 'acct-rm-no':ui.rmAsk=null;render();break;
+    case 'acct-remove':acctRemove(t.dataset.h);break;
+    case 'token-update':tokenUpdate();break;
     case 'export-data':exportData();break;
     case 'import-data':var fi=$('#import-file');if(fi) fi.click();break;
     case 'copy-url':
@@ -2063,7 +2169,7 @@ document.addEventListener('change',function(e){
   if(a==='tree-root'){ui.treeRoot=t.value;render();}
   if(a==='sort'){ui.sort=t.value;lsSet('fl-sort',ui.sort);$('#people-grid').innerHTML=peopleCards();}
 });
-document.addEventListener('submit',function(e){e.preventDefault();if(e.target.id==='unlock') unlock();});
+document.addEventListener('submit',function(e){e.preventDefault();if(e.target.id==='login') signIn();if(e.target.id==='setup') runSetup();});
 /* Root the tree at the oldest known ancestor, going through a spouse for in-laws with no parents listed. */
 function topAncestor(id){
   function hasPar(x){var p=P(x);return p&&p.parents.some(function(q){return P(q);});}

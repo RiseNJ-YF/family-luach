@@ -5,49 +5,49 @@ and Hebrew calendars, with printable PDFs (including a vector wall calendar for 
 
 **Site:** https://risenj-yf.github.io/family-luach/
 
+## Signing in
+
+Everyone signs in with a **username and password**. There are two kinds of accounts:
+
+- **Viewer** — sees the calendar, family tree and people, and can export PDFs.
+- **Editor** — can also add and change people, save, and manage who can sign in.
+
+Editors add people, set their passwords and remove them in **Settings → People who can sign in**.
+Forgot a password? An editor sets a new one.
+
 ## How privacy works
 
-This repository is public, but the family data is not readable in it:
+This repository is public, but nothing personal in it is readable:
 
 - `index.html` is the app. It contains only a made-up example family.
-- `family.enc.json` holds the real family data, **encrypted** with the family password
-  (AES-256-GCM, key derived with PBKDF2-SHA256, 310,000 rounds). Without the password it is noise.
-  The only readable field is the family name, which the password screen shows.
-- The page encrypts the data in your browser before it is uploaded. Nobody — including GitHub —
-  sees the password or the readable data.
-- The page asks search engines not to index it.
+- `family.enc.json` holds the real family data **encrypted** (AES-256-GCM) with a random family key.
+  Each account's password (PBKDF2-SHA256, 310,000 rounds) unlocks a copy of that key.
+  Editors' passwords also unlock the GitHub key the site uses to save.
+- Usernames are stored only as hashes. The family name is the one readable field — the sign-in
+  screen shows it.
+- All encryption happens in the browser; GitHub never sees passwords or readable data.
 
-Family members open the site and type the family password once per device.
+## First-time setup (the first editor, once)
 
-## Keeping it up to date (owner)
+1. Open the site and click **Set it up (first editor)**.
+2. Follow step 1 on that screen to make a **GitHub key** (a fine-grained personal access token):
+   repository access **Only select repositories → family-luach**, permission **Contents: Read and write**,
+   the longest expiration offered. Paste it in.
+3. Choose your username and password, the family name, and optionally a data file from the Claude
+   version (Claude → Settings → **Download data file**).
+4. Click **Create the family site**, then add family members in Settings.
 
-1. **Make an access token** (one time): github.com → Settings → Developer settings →
-   Personal access tokens → **Fine-grained tokens** → Generate new token.
-   - Repository access: **Only select repositories** → `family-luach`
-   - Repository permissions: **Contents → Read and write**
-2. On the site, click **Owner sign-in** at the bottom, paste the token, and sign in.
-   The token is stored only in that browser.
-3. The first time: open **Settings**, import your data file (see below) or edit the example,
-   then **set the family password**. That saves and publishes the encrypted data.
-4. After that, edit and press **Save**. Family members see changes within a minute or two.
-
-To move data from the Claude version: in Claude, Settings → **Download data file**; on the site,
-Settings → **Import a data file…**, then Save. The same buttons make backups.
-
-Changing the family password (Settings) re-encrypts the data; everyone then needs the new password.
+Nobody needs the GitHub key after that. If it expires, saving stops with a message; an editor makes
+a new key and pastes it in **Settings → GitHub key**.
 
 ## Files
 
 | Path | What it is |
 | --- | --- |
 | `index.html` | The website (built from `src/app.html`). |
-| `family.enc.json` | Encrypted family data — written by the site when the owner saves. |
+| `family.enc.json` | Encrypted family data and accounts — written by the site. |
 | `src/app.html` | App source. The same code also runs as the Claude artifact. |
-| `tools/build.js` | Builds `index.html` from the source with the example family: `node tools/build.js` |
+| `tools/build.js` | Builds `index.html` with the example family: `node tools/build.js` |
 | `tools/example.json` | The made-up example family. |
+| `tools/serve-test.js` | Local test server for a copy in `.test/` (git-ignored). |
 | `FONT-LICENSE-Alef.txt` | License for the embedded Alef font (SIL Open Font License 1.1). |
-
-## One-time GitHub Pages setup
-
-Repository → Settings → Pages → Build and deployment → Source: **Deploy from a branch** →
-Branch: **main**, folder **/ (root)** → Save.
