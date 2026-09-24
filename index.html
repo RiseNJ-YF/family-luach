@@ -962,7 +962,8 @@ function chainOf(start,seen){
   function expL(x){var o=others(x),out=[x];o.forEach(function(s){out=expL(s).concat(out);});return out;}
   function expR(x){var o=others(x),out=[x];o.forEach(function(s){out=out.concat(expR(s));});return out;}
   var sp=others(start),left=[],right=[];
-  sp.forEach(function(s,i){(i%2===0?left:right).push(s);});
+  /* First spouse to the right (the Hebrew-mode mirror puts it on the left), second to the left, and so on. */
+  sp.forEach(function(s,i){(i%2===0?right:left).push(s);});
   var seq=[start];
   left.forEach(function(s){seq=expL(s).concat(seq);});
   right.forEach(function(s){seq=seq.concat(expR(s));});
@@ -1058,7 +1059,7 @@ function layoutFam(id,seen,depth){
 }
 function currentRoot(){var roots=treeRoots();return ui.treeRoot&&P(ui.treeRoot)?ui.treeRoot:(roots[0]?roots[0].id:data.people[0].id);}
 /* In Hebrew mode the tree reads right to left: the whole layout is mirrored, so the oldest child
-   (and a first marriage) sits on the right. */
+   and a first spouse on the left. */
 function mirrorTree(L){
   var W=L.w,LW=1.5,swap={tl:'tr',tr:'tl',bl:'br',br:'bl'};
   L.items.forEach(function(it){
