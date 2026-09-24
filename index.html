@@ -227,8 +227,10 @@ button:disabled{cursor:default;opacity:.6}
 .fring small{font-family:var(--sans);font-size:10px;color:var(--ink-3);font-weight:700}
 .fcell{position:absolute}
 .tcell{position:relative;display:flex;flex-direction:column;align-items:center}
-.tcard{border:1px solid var(--line-2);background:var(--surface);border-radius:10px;padding:8px 10px 9px;width:156px;height:108px;overflow:hidden;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:1px;line-height:1.2}
+.tcard{border:1px solid var(--line-2);background:var(--surface);border-radius:10px;padding:8px 9px 9px;width:172px;height:124px;overflow:hidden;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:1px;line-height:1.2}
 .tcard>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tcard>span.tn,.tcard>span.tl{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.15}
+.tcard .tn.long{font-size:13.5px}.tcard .tn.xlong{font-size:12px}
 .tcard:hover{border-color:var(--accent);box-shadow:0 2px 10px color-mix(in srgb,var(--accent) 18%,transparent)}
 .tcard .tn{font-family:var(--display);font-weight:500;font-size:16px}
 .tcard .tl{font-size:12px;color:var(--ink-3)}
@@ -924,7 +926,7 @@ function tcard(p,isRoot,placed){
   if(par.length&&!isRoot&&!par.some(function(x){return placed[x];})) h+='<button class="upbtn" data-act="root" data-pid="'+esc(par[0])+'" title="Show this side of the family">↑ '+(p.hebFirst?'<bdi dir="rtl" lang="he">'+esc(p.hebFirst)+'</bdi> — family':esc(p.first||'Their')+'’s family')+'</button>';
   h+='<button class="tcard'+(p.gender?' '+p.gender:'')+(p.deceased?' dec':'')+(isRoot?' root':'')+'" data-act="open" data-pid="'+esc(p.id)+'" title="'+esc(primaryText(p)+(hn?' — '+fullName(p):''))+'">';
   if(hn){
-    h+='<span class="tn he" dir="rtl" lang="he">'+esc(hn)+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
+    h+='<span class="tn he'+(hn.length>40?' xlong':hn.length>24?' long':'')+'" dir="rtl" lang="he">'+esc(hn)+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     h+='<span class="tl">'+esc(fullName(p))+'</span>';
   } else {
     h+='<span class="tn">'+esc(p.first||'Unnamed')+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
@@ -940,7 +942,7 @@ function tcard(p,isRoot,placed){
    Each row is a "marriage chain": a person plus everyone joined to them by marriage, including a
    spouse's other marriages (e.g. shimon ⚭ Rivka ⚭ Yitzchak ⚭ chava). Children drop from the midpoint
    of the marriage they came from, or from one parent's card when the other parent isn't in the row. */
-var TW=156,TH=108,SG=46,SIB=22,GG=44,VG=90,TPAD=24;
+var TW=172,TH=124,SG=46,SIB=22,GG=44,VG=90,TPAD=24;
 function chainOf(start,seen){
   var inC={};inC[start]=1;
   function others(x){var o=spousesOf(x).map(function(s){return s.pid;}).filter(function(id){return !seen[id]&&!inC[id];});o.forEach(function(id){inC[id]=1;});return o;}
