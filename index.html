@@ -1225,6 +1225,7 @@ function drawerView(p){
   }
   h+='</div><footer class="dfoot">';
   h+='<button class="btn sm" data-act="show-tree" data-pid="'+esc(p.id)+'">Show in family tree</button>';
+  if(kidsOf(p.id).length||spousesOf(p.id).length) h+='<button class="btn sm" data-act="tree-here" data-pid="'+esc(p.id)+'" title="Only this person, their spouse and their descendants — handy for printing one branch">Start tree from here</button>';
   if(editable()){
     h+='<button class="btn sm primary" data-act="edit" data-pid="'+esc(p.id)+'">Edit</button>';
     if(sp.length<=1) h+='<button class="btn sm" data-act="add-rel" data-r="child" data-pid="'+esc(p.id)+'"'+(sp[0]?' data-sp="'+esc(sp[0].pid)+'"':'')+'>Add child</button>';
@@ -2071,6 +2072,7 @@ document.addEventListener('click',function(e){
     case 'open':openPerson(pid);break;
     case 'show-tree':ui.treeRoot=topAncestor(pid);ui.view='tree';lsSet('fl-view','tree');drawer=null;renderAll();window.scrollTo(0,0);break;
     case 'root':ui.treeRoot=pid;ui.zoomFit=true;render();break;
+    case 'tree-here':ui.treeRoot=pid;ui.zoomFit=true;ui.view='tree';lsSet('fl-view','tree');drawer=null;renderAll();window.scrollTo(0,0);break;
     case 'zoom':
       var z=+t.dataset.z,tw=$('#tree-wrap');
       if(z===0){ui.zoomFit=true;sizeTree();}
