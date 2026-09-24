@@ -202,7 +202,10 @@ button:disabled{cursor:default;opacity:.6}
 .tree-bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:space-between;margin-bottom:14px}
 .tree-bar label{font-size:13px;color:var(--ink-2);font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .sel{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:14px;max-width:100%}
-.tree-wrap{overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 16px 36px;max-height:78vh;background-image:radial-gradient(color-mix(in srgb,var(--ink) 10%,transparent) 1px,transparent 1px);background-size:22px 22px}
+.wrap.wide{max-width:none}
+.zoom-pct{cursor:default;min-width:56px;justify-content:center}
+.tree-wrap.panning{cursor:grabbing}
+.tree-wrap{cursor:grab;touch-action:pan-x pan-y;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 16px 36px;background-image:radial-gradient(color-mix(in srgb,var(--ink) 10%,transparent) 1px,transparent 1px);background-size:22px 22px}
 .ftree{position:relative;margin-inline:auto}
 .ftree .fl-h{position:absolute;height:0;border-top:1.5px solid var(--line-2)}
 .ftree .fl-v{position:absolute;width:0;border-left:1.5px solid var(--line-2)}
@@ -637,7 +640,7 @@ var ui={
   calMode:lsGet('fl-calmode','greg'),calSpan:lsGet('fl-calspan','month'),
   gCur:(function(){var g=gFromAbs(TODAY);return {y:g.y,m:g.m};})(),
   hCur:(function(){var h=H.fromAbs(TODAY);return {y:h.y,m:h.m};})(),
-  sel:TODAY,treeRoot:null,zoom:1,q:'',sort:lsGet('fl-sort','name'),horizon:90,preview:false,panel:null,clearAsk:false
+  sel:TODAY,treeRoot:null,zoom:1,zoomFit:true,orient:lsGet('fl-orient','landscape'),q:'',sort:lsGet('fl-sort','name'),horizon:90,preview:false,panel:null,clearAsk:false
 };
 var canWrite=false,artNs=null,saving=false,exporting=false;
 function editable(){return canWrite&&!ui.preview;}
@@ -647,7 +650,7 @@ function render(){
   if(WEB&&web.state!=='ready'){$('#app').innerHTML=gateHTML();return;}
   var hT=H.fromAbs(TODAY);
   var h='';
-  h+='<div class="wrap">';
+  h+='<div class="wrap'+(ui.view==='tree'?' wide':'')+'">';
   h+='<header class="top"><div class="brand"><h1>'+esc(data.meta.familyName)+'</h1>';
   h+='<div class="today-line"><span>'+esc(WDL[dow(TODAY)])+', '+esc(fmtG(TODAY,{long:true}))+'</span><span class="sep">|</span><span>'+esc(fmtH(hT))+'</span><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hT))+'</span></div></div>';
   h+='<div class="top-actions">';
@@ -661,9 +664,9 @@ function render(){
     h+='<button class="tab" role="tab" data-act="view" data-v="'+t[0]+'" aria-selected="'+(ui.view===t[0])+'">'+t[1]+'</button>';
   });
   h+='</nav>';
-  if(data.people.length) h+='<button class="btn sm" data-act="'+(ui.view==='calendar'?'pdf-menu':'pdf')+'" title="Save what’s on this tab as a PDF"'+(exporting?' disabled':'')+(ui.view==='calendar'?' aria-expanded="'+!!ui.pdfMenu+'"':'')+'>'+(exporting?'Preparing PDF…':(ui.view==='calendar'?'Export PDF ▾':'Export PDF'))+'</button>';
+  if(data.people.length) h+='<button class="btn sm" data-act="pdf-menu" title="Save what’s on this tab as a PDF"'+(exporting?' disabled':'')+' aria-expanded="'+!!ui.pdfMenu+'">'+(exporting?'Preparing PDF…':'Export PDF ▾')+'</button>';
   h+='</div>';
-  if(ui.view==='calendar'&&ui.pdfMenu&&!exporting) h+=pdfMenuHTML();
+  if(ui.pdfMenu&&!exporting) h+=pdfMenuHTML();
   if(editable()&&ui.panel==='share') h+=sharePanel();
   if(editable()&&ui.panel==='settings') h+=settingsPanel();
   if(editable()&&data.meta.example&&!ui.panel) h+='<div class="banner"><span><b>This is an example family</b> so you can see how everything works. Replace it with your own when you’re ready.</span><button class="btn sm" data-act="panel" data-p="settings">Start my own family</button></div>';
@@ -672,6 +675,33 @@ function render(){
   h+='</div>';
   if(dirty&&canWrite) h+='<div class="savebar" role="status"><span>'+(saving?'Saving…':'Unsaved changes — family members won’t see them until you save.')+'</span><button class="btn sm ghost" data-act="discard"'+(saving?' disabled':'')+'>Discard</button><button class="btn sm primary" data-act="save"'+(saving?' disabled':'')+'>Save</button></div>';
   $('#app').innerHTML=h;
+  if(ui.view==='tree') sizeTree();
+}
+/* The tree box fills the rest of the window; in "fit" mode the whole tree is scaled to fit inside it. */
+function sizeTree(){
+  var w=$('#tree-wrap'),inner=$('#tree-zoom'),ft=w&&w.querySelector('.ftree');
+  if(!w||!inner||!ft) return;
+  w.style.height=Math.max(320,window.innerHeight-w.getBoundingClientRect().top-44)+'px';
+  if(ui.zoomFit){
+    var tw=parseFloat(ft.style.width),th=parseFloat(ft.style.height);
+    var z=Math.min((w.clientWidth-32)/tw,(w.clientHeight-64)/th,1.25);
+    setZoom(Math.max(0.12,z));w.scrollLeft=0;w.scrollTop=0;
+  }
+}
+function setZoom(z){
+  ui.zoom=z;var inner=$('#tree-zoom'),pct=$('#zoom-pct');
+  if(inner) inner.style.zoom=z;
+  if(pct) pct.textContent=Math.round(z*100)+'%';
+}
+/* Zoom around a point (the mouse), keeping that spot of the tree under the pointer. */
+function zoomAt(clientX,clientY,factor){
+  var w=$('#tree-wrap');if(!w) return;
+  var r=w.getBoundingClientRect(),z=ui.zoom,nz=Math.max(0.12,Math.min(2.5,z*factor));
+  if(nz===z) return;
+  var mx=clientX-r.left-w.clientLeft,my=clientY-r.top-w.clientTop;
+  var px=(w.scrollLeft+mx-16)/z,py=(w.scrollTop+my-28)/z;
+  ui.zoomFit=false;setZoom(nz);
+  w.scrollLeft=px*nz+16-mx;w.scrollTop=py*nz+28-my;
 }
 function sharePanel(){
   if(WEB) return webSharePanel();
@@ -1030,9 +1060,9 @@ function viewTree(){
   h+='</select></label><div class="cal-nav">';
   var par=rp.parents.filter(function(x){return P(x);});
   if(par.length) h+='<button class="btn sm" data-act="root" data-pid="'+esc(par[0])+'">↑ Up a generation</button>';
-  h+='<button class="btn sm" data-act="zoom" data-z="-1" aria-label="Zoom out">−</button><button class="btn sm num" data-act="zoom" data-z="0">'+Math.round(ui.zoom*100)+'%</button><button class="btn sm" data-act="zoom" data-z="1" aria-label="Zoom in">+</button></div></div>';
-  h+='<div class="tree-wrap"><div style="zoom:'+ui.zoom+'">'+treeMarkup(root)+'</div></div>';
-  h+='<p class="note" style="margin-top:10px">Tap anyone for their dates, children and grandchildren. When someone married more than once, each marriage is shown and its children hang from between that couple. “↑ family” tags jump to an in-law’s side of the tree.</p>';
+  h+='<button class="btn sm" data-act="zoom" data-z="-1" aria-label="Zoom out">−</button><span class="btn sm num zoom-pct" id="zoom-pct">'+Math.round(ui.zoom*100)+'%</span><button class="btn sm" data-act="zoom" data-z="1" aria-label="Zoom in">+</button><button class="btn sm" data-act="zoom" data-z="0">Fit</button></div></div>';
+  h+='<div class="tree-wrap" id="tree-wrap"><div id="tree-zoom" style="zoom:'+ui.zoom+'">'+treeMarkup(root)+'</div></div>';
+  h+='<p class="note" style="margin-top:8px">Scroll or pinch to zoom, drag to move around, tap anyone for their details. Each marriage is shown, with its children hanging from between that couple.</p>';
   return h;
 }
 
@@ -1388,17 +1418,17 @@ function listBlocks(a0,a1,showWhen,byHebMonth){
   if(!out.length) out.push({html:'<p>No dates in this range with the current filters.</p>'});
   return out;
 }
-function pxMonthGrid(){
-  var r=calRange(),heb=ui.calMode==='heb',by={};
+function pxMonthGrid(width){
+  var r=calRange(),heb=ui.calMode==='heb',by={},cellH=ui.orient==='portrait'?138:92;
   eventsBetween(r.s,r.e).filter(visible).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
-  var h='<div class="px-cal" style="width:976px">';
+  var h='<div class="px-cal" style="width:'+(width||976)+'px">';
   WDS.forEach(function(w,i){h+='<div class="px-wd">'+(i===6?'Shabbat':w)+'</div>';});
   for(var a=r.s;a<=r.e;a++){
     var g=gFromAbs(a),hd=H.fromAbs(a),out=a<r.a0||a>r.a1;
     var prim=heb?'<span class="he" dir="rtl" lang="he">'+esc(gem(hd.d))+'</span>':String(g.d);
     var sec=heb?(g.d===1||a===r.s?GMS[g.m-1]+' '+g.d:String(g.d)):'<span class="he" dir="rtl" lang="he">'+esc(hd.d===1?gem(1)+' '+hmName(hd.m,hd.y,true):gem(hd.d))+'</span>';
-    h+='<div class="px-cell'+(out?' out':'')+'"><div class="px-cn">'+prim+'<span class="h">'+sec+'</span></div>';
-    (by[a]||[]).forEach(function(e){h+='<div class="px-ev" style="border-left-color:'+KHEX[kkey(e)]+'">'+evShort(e)+(e.cal==='heb'&&e.kind!=='holiday'?' (א)':'')+'</div>';});
+    h+='<div class="px-cell'+(out?' out':'')+'" style="min-height:'+cellH+'px"><div class="px-cn">'+prim+'<span class="h">'+sec+'</span></div>';
+    (by[a]||[]).forEach(function(e){h+='<div class="px-ev" style="border-left-color:'+KHEX[kkey(e)]+'">'+evShort(e)+(e.cal==='heb'&&e.kind!=='holiday'&&!heb?' (א)':'')+'</div>';});
     h+='</div>';
   }
   return h+'</div>'+pxLegend();
@@ -1406,7 +1436,7 @@ function pxMonthGrid(){
 function pxYearGlance(){
   var ms=yearMonths(),heb=ui.calMode==='heb',by={};
   eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(visible).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
-  var cols=4,h='<div class="px-yg" style="grid-template-columns:repeat('+cols+',1fr)">';
+  var cols=ui.orient==='portrait'?3:4,h='<div class="px-yg" style="grid-template-columns:repeat('+cols+',1fr)">';
   ms.forEach(function(mo){
     h+='<div class="px-ym"><div class="t">'+esc(mo.t)+'<span class="he" dir="rtl" lang="he">'+esc(mo.he)+'</span></div><div class="px-mini">';
     WD1.forEach(function(w){h+='<span class="w">'+w+'</span>';});
@@ -1421,17 +1451,18 @@ function pxYearGlance(){
 }
 function exportSpec(kind){
   var hT=H.fromAbs(TODAY),span=kind==='month'||kind==='year'?kind:ui.calSpan;
-  var spec={printed:'Printed '+fmtG(TODAY)+' · '+fmtH(hT),blocks:[],orient:'portrait',fit:false,pageHead:'',title:'',file:'',body:''};
+  var spec={printed:'Printed '+fmtG(TODAY)+' · '+fmtH(hT),blocks:[],orient:ui.orient,fit:false,pageHead:'',title:'',file:'',body:''};
+  var PW=ui.orient==='portrait'?816:1056;
   if(ui.view==='calendar'&&span==='year'){
     var yt=yearTitle(),ms=yearMonths();
-    spec.orient='landscape';spec.title='Year calendar · '+yt.t+' ('+yt.sub+')';spec.file='Calendar '+yt.t;
+    spec.title='Year calendar · '+yt.t+' ('+yt.sub+')';spec.file='Calendar '+yt.t;
     spec.blocks=[{html:'<div>'+pxYearGlance()+'</div>',breakAfter:true}].concat(listBlocks(ms[0].a0,ms[ms.length-1].a1,false,ui.calMode==='heb'));
   } else if(ui.view==='calendar'){
     var mt=monthTitle();
-    spec.orient='landscape';spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub;spec.file='Calendar '+mt.t;spec.body=pxMonthGrid();
+    spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub;spec.file='Calendar '+mt.t;spec.body=pxMonthGrid(PW-80);
   } else if(ui.view==='tree'){
     var root=currentRoot();
-    spec.orient='landscape';spec.fit=true;spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';spec.body=treeMarkup(root);
+    spec.fit=true;spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';spec.body=treeMarkup(root);
   } else if(ui.view==='people'){
     spec.title='Family directory · '+data.people.length+' people';spec.file='Family directory';
     spec.pageHead='<div class="px-prow h"><span>Name</span><span>English name</span><span>Born</span><span>Age</span><span>Married to</span><span>Children</span><span>Grandchildren</span></div>';
@@ -1504,9 +1535,15 @@ function makePdf(opts){
    here: each Hebrew word's letters are reversed and runs of Hebrew words are placed right to left. */
 var WALL_SIZES={'18x24':[24,18,'18 × 24 in (ARCH C)'],'24x36':[36,24,'24 × 36 in (ARCH D)'],'36x48':[48,36,'36 × 48 in (ARCH E)']};
 function pdfMenuHTML(){
-  var yt=yearTitle(),mt=monthTitle(),cur=lsGet('fl-wall','24x36');
-  var h='<section class="panel"><h3>Export the calendar as a PDF</h3>';
-  h+='<p><b>Wall calendar</b> — all of '+esc(yt.t)+' on one large sheet. Every day has its own box with that day’s names written inside it. Made for a plotter or print shop.</p>';
+  var yt=yearTitle(),mt=monthTitle(),cur=lsGet('fl-wall','24x36'),por=ui.orient==='portrait';
+  var h='<section class="panel"><h3>Export as a PDF</h3>';
+  h+='<div class="row" style="margin-top:4px"><span class="flab">Page orientation</span><div class="seg" role="group" aria-label="Page orientation"><button data-act="orient" data-o="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="orient" data-o="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';
+  if(ui.view!=='calendar'){
+    var what={upcoming:'the upcoming dates',tree:'the family tree',people:'the family directory'}[ui.view]||'this tab';
+    h+='<div class="row"><button class="btn sm primary" data-act="pdf">Export '+what+'</button><button class="btn sm ghost" data-act="pdf-menu">Close</button></div></section>';
+    return h;
+  }
+  h+='<p style="margin-top:12px"><b>Wall calendar</b> — all of '+esc(yt.t)+' on one large sheet. Every day has its own box with that day’s names written inside it. Made for a plotter or print shop.</p>';
   h+='<div class="row"><label class="check" for="wall-size">Sheet size</label><select class="sel" id="wall-size">';
   Object.keys(WALL_SIZES).forEach(function(k){h+='<option value="'+k+'"'+(k===cur?' selected':'')+'>'+WALL_SIZES[k][2]+'</option>';});
   h+='</select><button class="btn sm primary" data-act="pdf" data-kind="wall">Export wall calendar</button></div>';
@@ -1541,8 +1578,14 @@ function vecText(pdf){
     return out;
   }
   function wrap(toks,size,maxW,maxLines){
-    var lines=[[]],w=0,sw=width(' ',false,size);
+    var lines=[[]],w=0,sw=width(' ',false,size),fit=[];
     toks.forEach(function(t){
+      if(width(t.w,t.b,size)<=maxW){fit.push(t);return;}
+      var chars=Array.from(t.w),cur='';
+      chars.forEach(function(ch){if(cur&&width(cur+ch,t.b,size)>maxW){fit.push(Object.assign({},t,{w:cur,sp:false}));cur='';}cur+=ch;});
+      if(cur) fit.push(Object.assign({},t,{w:cur}));
+    });
+    fit.forEach(function(t){
       var tw=width(t.w,t.b,size),line=lines[lines.length-1];
       var add=(line.length&&line[line.length-1].sp?sw:0)+tw;
       if(line.length&&w+add>maxW){lines.push([t]);w=tw;}
@@ -1595,7 +1638,7 @@ function coupleText(e){
   return ps.map(firstName).join(' & ')+(ps[0].last?' '+ps[0].last:'');
 }
 function wallSegs(e){
-  var p=P(e.pids[0]),segs=e.cal==='heb'?[{t:'א ',c:'#6A4899',b:true}]:[];
+  var p=P(e.pids[0]),segs=e.cal==='heb'&&ui.calMode!=='heb'?[{t:'א ',c:'#6A4899',b:true}]:[];
   switch(e.kind){
     case 'birthday':segs.push({t:nameText(p),b:true});if(e.n!=null) segs.push({t:' · '+e.n});break;
     case 'anniversary':segs.push({t:coupleText(e),b:true},{t:' · '+ord(e.n)});break;
@@ -1608,8 +1651,8 @@ function loadPdfLib(){return window.jspdf&&window.jspdf.jsPDF?Promise.resolve():
 function makeWall(size){
   var dims=WALL_SIZES[size]||WALL_SIZES['24x36'];
   return loadPdfLib().then(function(){
-    var W=dims[0]*72,Hh=dims[1]*72,M=0.45*72,G=0.2*72;
-    var pdf=new window.jspdf.jsPDF({orientation:'landscape',unit:'pt',format:[W,Hh],compress:true});
+    var por=ui.orient==='portrait',W=(por?dims[1]:dims[0])*72,Hh=(por?dims[0]:dims[1])*72,M=0.45*72,G=0.2*72;
+    var pdf=new window.jspdf.jsPDF({orientation:por?'portrait':'landscape',unit:'pt',format:[W,Hh],compress:true});
     pdf.addFileToVFS('Alef-Regular.ttf',$('#font-alef-regular').textContent.trim());pdf.addFont('Alef-Regular.ttf','Alef','normal');
     pdf.addFileToVFS('Alef-Bold.ttf',$('#font-alef-bold').textContent.trim());pdf.addFont('Alef-Bold.ttf','Alef','bold');
     pdf.setProperties({title:data.meta.familyName+' — '+yearTitle().t,creator:'Family Luach'});
@@ -1617,7 +1660,7 @@ function makeWall(size){
     function fill(hex){var c=rgb(hex);pdf.setFillColor(c[0],c[1],c[2]);}
     function stroke(hex,w){var c=rgb(hex);pdf.setDrawColor(c[0],c[1],c[2]);pdf.setLineWidth(w);}
     var ms=yearMonths(),heb=ui.calMode==='heb',yt=yearTitle(),n=ms.length;
-    var C=n>12?5:4,R=Math.ceil(n/C),headH=Hh*0.07;
+    var C=por?3:(n>12?5:4),R=Math.ceil(n/C),headH=Math.min(W,Hh)*0.07;
     var mW=(W-2*M-(C-1)*G)/C,mH=(Hh-2*M-headH-G-(R-1)*G)/R;
     var tH=Math.max(16,mH*0.08),wdH=Math.max(9,mH*0.042),dW=mW/7,dH=(mH-tH-wdH)/6;
     var fs=Math.max(6,Math.min(15,Math.min(dH/5.6,dW/9))),nfs=fs*1.2;
@@ -1632,7 +1675,7 @@ function makeWall(size){
       var w=T.width([{t:k[1]}],ls);lx-=w;T.draw([{t:k[1],c:INK2}],lx,ly,ls,'left');
       lx-=ls*0.35+ls*0.9;fill(KHEX[k[0]]);pdf.rect(lx,ly-ls*0.8,ls*0.9,ls*0.9,'F');lx-=ls*1.6;
     });
-    T.draw([{t:'א',c:'#6A4899',b:true},{t:' = kept by the Hebrew date · numbers are the age or year being marked · Printed '+fmtG(TODAY),c:INK3}],W-M,M+headH*0.86,ls,'right');
+    T.draw((heb?[]:[{t:'א',c:'#6A4899',b:true},{t:' = kept by the Hebrew date · ',c:INK3}]).concat([{t:'numbers are the age or year being marked · Printed '+fmtG(TODAY),c:INK3}]),W-M,M+headH*0.86,ls,'right');
     stroke(INK,2.2);pdf.line(M,M+headH,W-M,M+headH);
     /* months */
     var top=M+headH+G;
@@ -1662,15 +1705,16 @@ function makeWall(size){
         T.draw([{t:small,c:INK3}],dx+dW-3.5,dy+nfs*1.05,fs*0.9,'right');
         var list=by[a]||[];if(!list.length) continue;
         var ey=dy+nfs*1.05+fs*0.55,avail=dy+dH-3-ey,innerW=dW-7-5;
-        /* lay out at full size, shrink a little if the day is busy, then fall back to "+N more" */
+        /* Names are never cut: each entry wraps onto as many lines as it needs, and a crowded day
+           shrinks its text until everything fits; only past that does "+N more" appear. */
         var plan=null;
-        for(var kf=1;kf>=0.7&&!plan;kf-=0.06){
-          var s=fs*kf,lh=s*1.2,blocks=list.map(function(e){
-            if(e.kind==='holiday') return {e:e,hol:true,lines:T.wrap(T.tokens([{t:e.title,c:'#3D7853',b:true}]),s,innerW+5,1),h:lh};
-            var ln=T.wrap(T.tokens(wallSegs(e)),s,innerW,2);return {e:e,lines:ln,h:ln.length*lh+2};
+        for(var kf=1;!plan;kf-=0.05){
+          var s=fs*kf,lh=s*1.2,last=kf<0.5,blocks=list.map(function(e){
+            if(e.kind==='holiday'){var hl=T.wrap(T.tokens([{t:e.title,c:'#3D7853',b:true}]),s,innerW+5);return {e:e,hol:true,lines:hl,h:hl.length*lh};}
+            var ln=T.wrap(T.tokens(wallSegs(e)),s,innerW);return {e:e,lines:ln,h:ln.length*lh+2};
           });
           var tot=blocks.reduce(function(t,b){return t+b.h+2;},0);
-          if(tot<=avail||kf-0.06<0.7) plan={s:s,lh:lh,blocks:blocks};
+          if(tot<=avail||last) plan={s:s,lh:lh,blocks:blocks};
         }
         var used=0,shown=[],hidden=0,moreH=plan.lh;
         plan.blocks.forEach(function(b,bi){
@@ -1690,7 +1734,7 @@ function makeWall(size){
         if(hidden) T.draw([{t:'+'+hidden+' more',c:INK3}],dx+3.5+5,yy+plan.lh*0.8,plan.s*0.9,'left');
       }
     });
-    var name=(data.meta.familyName+' - Wall calendar '+yt.t+' ('+dims[1]+'x'+dims[0]+' in)').replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
+    var name=(data.meta.familyName+' - Wall calendar '+yt.t+' ('+dims[1]+'x'+dims[0]+' in'+(por?', portrait':'')+')').replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
     return {blob:pdf.output('blob'),name:name,pages:1};
   });
 }
@@ -1926,7 +1970,7 @@ document.addEventListener('click',function(e){
   var t=e.target.closest('[data-act]');if(!t) return;
   var act=t.dataset.act,pid=t.dataset.pid;
   switch(act){
-    case 'view':ui.view=t.dataset.v;ui.panel=null;lsSet('fl-view',ui.view);render();window.scrollTo(0,0);break;
+    case 'view':ui.view=t.dataset.v;ui.panel=null;ui.pdfMenu=false;lsSet('fl-view',ui.view);render();window.scrollTo(0,0);break;
     case 'fkind':prefs.kinds[t.dataset.k]=!prefs.kinds[t.dataset.k];savePrefs();render();break;
     case 'fcal':prefs[t.dataset.c]=!prefs[t.dataset.c];savePrefs();render();break;
     case 'horizon':ui.horizon=ui.horizon>=365?ui.horizon+365:Math.min(ui.horizon+90,365);render();break;
@@ -1948,6 +1992,7 @@ document.addEventListener('click',function(e){
       var url=location.origin+location.pathname;
       try{navigator.clipboard.writeText(url).then(function(){toast('Address copied.');},function(){toast('Select the address and copy it.');});}catch(err){toast('Select the address and copy it.');}
       break;
+    case 'orient':ui.orient=t.dataset.o;lsSet('fl-orient',ui.orient);render();break;
     case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;render();break;
     case 'calmode':ui.calMode=t.dataset.m;lsSet('fl-calmode',ui.calMode);gotoMonthOf(ui.sel);render();break;
     case 'calspan':ui.calSpan=t.dataset.s;lsSet('fl-calspan',ui.calSpan);gotoMonthOf(ui.sel);render();break;
@@ -1962,8 +2007,12 @@ document.addEventListener('click',function(e){
     case 'yday':ui.sel=+t.dataset.abs;gotoMonthOf(ui.sel);ui.calSpan='month';lsSet('fl-calspan','month');render();window.scrollTo(0,0);break;
     case 'open':openPerson(pid);break;
     case 'show-tree':ui.treeRoot=topAncestor(pid);ui.view='tree';lsSet('fl-view','tree');drawer=null;renderAll();window.scrollTo(0,0);break;
-    case 'root':ui.treeRoot=pid;render();break;
-    case 'zoom':var z=+t.dataset.z;ui.zoom=z===0?1:Math.max(.4,Math.min(1.6,Math.round((ui.zoom+z*.1)*10)/10));render();break;
+    case 'root':ui.treeRoot=pid;ui.zoomFit=true;render();break;
+    case 'zoom':
+      var z=+t.dataset.z,tw=$('#tree-wrap');
+      if(z===0){ui.zoomFit=true;sizeTree();}
+      else if(tw){var rr0=tw.getBoundingClientRect();zoomAt(rr0.left+tw.clientWidth/2,rr0.top+tw.clientHeight/2,z>0?1.25:0.8);}
+      break;
     case 'drawer-close':
       if(drawer&&drawer.mode==='edit'&&drawer.draft&&drawer.draft.id){drawer={mode:'view',pid:drawer.draft.id};renderDrawer();}
       else closeDrawer();
@@ -2038,9 +2087,24 @@ document.addEventListener('change',function(e){
   if(t.id==='f-father'||t.id==='f-mother'){refreshHebPreview();return;}
   if(t.id==='import-file'&&t.files&&t.files[0]){importData(t.files[0]);t.value='';return;}
   var a=t.dataset&&t.dataset.actChange;
-  if(a==='tree-root'){ui.treeRoot=t.value;render();}
+  if(a==='tree-root'){ui.treeRoot=t.value;ui.zoomFit=true;render();}
   if(a==='sort'){ui.sort=t.value;lsSet('fl-sort',ui.sort);$('#people-grid').innerHTML=peopleCards();}
 });
+/* Tree: wheel / trackpad pinch zooms; drag on the background pans. */
+document.addEventListener('wheel',function(e){
+  var w=e.target.closest&&e.target.closest('#tree-wrap');if(!w) return;
+  e.preventDefault();
+  zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0015)));
+},{passive:false});
+var pan=null;
+document.addEventListener('pointerdown',function(e){
+  var w=e.target.closest&&e.target.closest('#tree-wrap');
+  if(!w||e.button!==0||e.target.closest('button')) return;
+  pan={w:w,x:e.clientX,y:e.clientY,l:w.scrollLeft,t:w.scrollTop,id:e.pointerId};w.classList.add('panning');
+});
+document.addEventListener('pointermove',function(e){if(!pan||e.pointerId!==pan.id) return;pan.w.scrollLeft=pan.l-(e.clientX-pan.x);pan.w.scrollTop=pan.t-(e.clientY-pan.y);});
+document.addEventListener('pointerup',function(){if(pan){pan.w.classList.remove('panning');pan=null;}});
+window.addEventListener('resize',function(){if(ui.view==='tree') sizeTree();});
 document.addEventListener('submit',function(e){e.preventDefault();if(e.target.id==='login') signIn();if(e.target.id==='setup') runSetup();});
 /* Root the tree at the oldest known ancestor, going through a spouse for in-laws with no parents listed. */
 function topAncestor(id){
