@@ -40,6 +40,7 @@ button:disabled{cursor:default;opacity:.6}
 .he-big,.day-panel>.he,.dheb,.pcard .ph,.udate .he{text-align:left}
 .num{font-variant-numeric:tabular-nums}
 .hn{font-family:var(--display);unicode-bidi:isolate;font-size:1.06em}
+.nm{font-weight:700}.np{font-weight:400}
 .tcard .tn.he{font-family:var(--display);font-size:15px}
 .dh h2 .hn,.pcard .pn .hn{font-size:1em}
 
@@ -516,7 +517,7 @@ function primaryText(p){return p?(hebName(p)||fullName(p)):'Unknown';}
 function nameHTML(p,zl){
   if(!p) return 'Unknown';
   var hn=hebName(p),z=zl&&p.deceased;
-  return hn?'<bdi class="hn" dir="rtl" lang="he">'+esc(hn+(z?' ז״ל':''))+'</bdi>':esc(fullName(p))+(z?' <span class="zl">ז״ל</span>':'');
+  return hn?'<bdi class="hn" dir="rtl" lang="he">'+hebPartsHTML(p)+(z?' <span class="np">ז״ל</span>':'')+'</bdi>':esc(fullName(p))+(z?' <span class="zl">ז״ל</span>':'');
 }
 function kidsOf(id){return (idx.kids[id]||[]).slice();}
 /* Spouses in marriage order (by wedding date; undated last). */
@@ -530,17 +531,18 @@ function parentsOf(p){
   ps.forEach(function(x){if(x===f||x===m) return;if(!f&&x.gender!=='f') f=x;else if(!m&&x.gender!=='m') m=x;});
   return {father:f,mother:m};
 }
-/* Hebrew name: first בן/בת parent last. Living → mother's name; deceased → father's name. */
-function hebNameFrom(o){
-  var first=(o.hebFirst||'').trim(),last=(o.hebLast||'').trim();
-  if(!first&&!last) return '';
+/* Hebrew name: first בן/בת parent last. Living → mother's name; deceased → father's name.
+   Kept as parts so first and last names can be shown bold and the parent's name in normal weight. */
+function hebNameParts(o){
+  var first=(o.hebFirst||'').trim(),last=(o.hebLast||'').trim(),rel='';
   var par=o.deceased?o.father:o.mother,pn=par&&par.hebFirst?par.hebFirst.trim():'';
   if(!pn) pn=((o.deceased?o.fatherHeb:o.motherHeb)||'').trim();
-  var s=first;
-  if(first&&pn&&o.gender) s+=(o.gender==='m'?' בן ':' בת ')+pn;
-  if(last) s+=(s?' ':'')+last;
-  return s;
+  if(first&&pn&&o.gender) rel=(o.gender==='m'?'בן ':'בת ')+pn;
+  return {first:first,rel:rel,last:last};
 }
+function hebNameFrom(o){var q=hebNameParts(o);return [q.first,q.rel,q.last].filter(Boolean).join(' ');}
+function hebParts(p){var pr=parentsOf(p);return hebNameParts({hebFirst:p.hebFirst,hebLast:p.hebLast,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
+function hebPartsHTML(p){var q=hebParts(p);return [q.first?'<b class="nm">'+esc(q.first)+'</b>':'',q.rel?'<span class="np">'+esc(q.rel)+'</span>':'',q.last?'<b class="nm">'+esc(q.last)+'</b>':''].filter(Boolean).join(' ');}
 function hebName(p){if(!p) return '';var pr=parentsOf(p);return hebNameFrom({hebFirst:p.hebFirst,hebLast:p.hebLast,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
 function hebNameZl(p){var n=hebName(p);return n&&p.deceased?n+' ז״ל':n;}
 function childWord(p){return p.gender==='m'?'Son':p.gender==='f'?'Daughter':'Child';}
@@ -919,7 +921,7 @@ function tcard(p,isRoot,placed){
   if(par.length&&!isRoot&&!par.some(function(x){return placed[x];})) h+='<button class="upbtn" data-act="root" data-pid="'+esc(par[0])+'" title="Show this side of the family">↑ '+(p.hebFirst?'<bdi dir="rtl" lang="he">'+esc(p.hebFirst)+'</bdi> — family':esc(p.first||'Their')+'’s family')+'</button>';
   h+='<button class="tcard'+(p.gender?' '+p.gender:'')+(p.deceased?' dec':'')+(isRoot?' root':'')+'" data-act="open" data-pid="'+esc(p.id)+'" title="'+esc(primaryText(p)+(hn?' — '+fullName(p):''))+'">';
   if(hn){
-    h+='<span class="tn he'+(hn.length>40?' xlong':hn.length>24?' long':'')+'" dir="rtl" lang="he">'+esc(hn)+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
+    h+='<span class="tn he'+(hn.length>40?' xlong':hn.length>24?' long':'')+'" dir="rtl" lang="he">'+hebPartsHTML(p)+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     h+='<span class="tl">'+esc(fullName(p))+'</span>';
   } else {
     h+='<span class="tn">'+esc(p.first||'Unnamed')+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
@@ -1644,6 +1646,15 @@ function vecText(pdf){
     draw:function(segs,x,y,size,align){return drawLine(tokens(segs),x,y,size,align);},
     width:function(segs,size){return lineWidth(visual(tokens(segs)),size);}};
 }
+function nameSegs(p,zl){
+  var z=zl&&p&&p.deceased?[{t:' ז״ל'}]:[];
+  if(!hebName(p)) return [{t:fullName(p),b:true}].concat(z);
+  var q=hebParts(p),out=[];
+  if(q.first) out.push({t:q.first,b:true});
+  if(q.rel) out.push({t:(out.length?' ':'')+q.rel});
+  if(q.last) out.push({t:(out.length?' ':'')+q.last,b:true});
+  return out.concat(z);
+}
 function nameText(p,zl){
   var hn=hebName(p),z=zl&&p&&p.deceased?' ז״ל':'';
   return (hn||fullName(p))+z;
@@ -1657,10 +1668,10 @@ function coupleText(e){
 function wallSegs(e){
   var p=P(e.pids[0]),segs=e.cal==='heb'&&ui.calMode!=='heb'?[{t:'א ',c:'#6A4899',b:true}]:[];
   switch(e.kind){
-    case 'birthday':segs.push({t:nameText(p),b:true});if(e.n!=null) segs.push({t:' · '+e.n});break;
+    case 'birthday':segs=segs.concat(nameSegs(p));if(e.n!=null) segs.push({t:' · '+e.n});break;
     case 'anniversary':segs.push({t:coupleText(e),b:true},{t:' · '+ord(e.n)});break;
-    case 'yahrzeit':segs.push({t:nameText(p,true),b:true},{t:' · '+ord(e.n)});break;
-    default:segs.push({t:(e.title||'Anniversary')+' · '},{t:nameText(p),b:true});
+    case 'yahrzeit':segs=segs.concat(nameSegs(p,true));segs.push({t:' · '+ord(e.n)});break;
+    default:segs.push({t:(e.title||'Anniversary')+' · '});segs=segs.concat(nameSegs(p));
   }
   return segs;
 }
