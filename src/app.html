@@ -1713,6 +1713,9 @@ window.flMakePdf=makePdf;
    accounts stored in the site's private database. Viewers can read; editors can also save and manage
    who can sign in. */
 var WEB=!(window.claude&&typeof window.claude.use==='function');
+var SITE_URL='https://family-luach-beta.vercel.app/';
+/* The old GitHub Pages address forwards to the Vercel site. */
+if(WEB&&/\.github\.io$/i.test(location.hostname)) location.replace(SITE_URL);
 var web={state:WEB?'loading':'off',err:'',title:'',me:null,rev:0,busy:false,msg:''};
 var accounts=null;
 function api(path,method,payload){
