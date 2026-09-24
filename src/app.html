@@ -922,8 +922,10 @@ function treeRoots(){
 function countDesc(id){return genCounts(id).reduce(function(a,b){return a+b;},0);}
 function coupleLabel(p){return chainOf(p.id,{}).map(function(id){return primaryText(P(id));}).join(' & ');}
 function tcard(p,isRoot,placed,pdf){
-  var b=parseISO(p.birth),d=parseISO(p.death),dates='';
-  if(pdf&&noAge(p)) dates=p.deceased?(d?'? – '+d.y:''):(b?'Birthday '+fmtMD(b):'');
+  var b=parseISO(p.birth),d=parseISO(p.death),dates='',hd='';
+  /* Hebrew-mode tree PDF, age hidden: the Hebrew date (day and month only) instead of the English one. */
+  if(pdf&&noAge(p)&&ui.calMode==='heb'&&(p.deceased?d:b&&!p.birthNoYear)){hd=fmtHe(p.deceased?hebOf(p.death,p.deathSunset):hebOf(p.birth,p.birthSunset),false);dates=p.deceased?'Yahrzeit ':'Birthday ';}
+  else if(pdf&&noAge(p)) dates=p.deceased?(d?'? – '+d.y:''):(b?'Birthday '+fmtMD(b):'');
   else if(p.deceased) dates=(b&&!p.birthNoYear?b.y:'?')+' – '+(d?d.y:'?');
   else if(b&&!p.birthNoYear) dates=b.y+' · age '+ageAt(p,TODAY);
   else if(b) dates='Birthday '+fmtMD(b);
@@ -939,7 +941,7 @@ function tcard(p,isRoot,placed,pdf){
     h+='<span class="tn">'+esc(p.first||'Unnamed')+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     if(p.last) h+='<span class="tl">'+esc(p.last)+'</span>';
   }
-  if(dates) h+='<span class="td num">'+esc(dates)+'</span>';
+  if(dates) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
   if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gc[1]?' · '+gc[1]+' grand':'')+'</span>';
   var so=soloOf(p.id);
   if(so.length) h+='<span class="tk">⚭ '+so.map(function(m){return soloName(m)?esc(soloName(m)):'married';}).join(', ')+'</span>';
