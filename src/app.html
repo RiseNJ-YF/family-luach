@@ -1037,8 +1037,22 @@ function layoutFam(id,seen,depth){
   return {w:maxX-minX,h:TH+(groups.length?VG+maxSubH:0),cx:xs[pos[id]]+sh+TW/2,items:items};
 }
 function currentRoot(){var roots=treeRoots();return ui.treeRoot&&P(ui.treeRoot)?ui.treeRoot:(roots[0]?roots[0].id:data.people[0].id);}
+/* In Hebrew mode the tree reads right to left: the whole layout is mirrored, so the oldest child
+   (and a first marriage) sits on the right. */
+function mirrorTree(L){
+  var W=L.w,LW=1.5,swap={tl:'tr',tr:'tl',bl:'br',br:'bl'};
+  L.items.forEach(function(it){
+    if(it.t==='card') it.x=W-it.x-TW;
+    else if(it.t==='ring') it.x=W-it.x;
+    else if(it.t==='h') it.x=W-it.x-it.w;
+    else if(it.t==='v') it.x=W-it.x-LW;
+    else if(it.t==='el'){it.x=W-it.x-it.w;it.c=swap[it.c];}
+  });
+  return L;
+}
 function treeMarkup(root){
   var L=layoutFam(root,{},0),placed={},h='';
+  if(ui.calMode==='heb') mirrorTree(L);
   L.items.forEach(function(it){if(it.t==='card') placed[it.id]=1;});
   L.items.forEach(function(it){
     var y=it.y+TPAD;
@@ -1062,6 +1076,7 @@ function viewTree(){
   h+='</select></label><div class="cal-nav">';
   var par=rp.parents.filter(function(x){return P(x);});
   if(par.length) h+='<button class="btn sm" data-act="root" data-pid="'+esc(par[0])+'">↑ Up a generation</button>';
+  h+='<div class="seg" role="group" aria-label="Direction"><button data-act="calmode" data-m="greg" aria-pressed="'+(ui.calMode!=='heb')+'" title="Oldest on the left">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+(ui.calMode==='heb')+'" title="Oldest on the right">Hebrew</button></div>';
   h+='<button class="btn sm" data-act="zoom" data-z="-1" aria-label="Zoom out">−</button><span class="btn sm num zoom-pct" id="zoom-pct">'+Math.round(ui.zoom*100)+'%</span><button class="btn sm" data-act="zoom" data-z="1" aria-label="Zoom in">+</button><button class="btn sm" data-act="zoom" data-z="0">Fit</button></div></div>';
   h+='<div class="tree-wrap" id="tree-wrap"><div id="tree-zoom" style="zoom:'+ui.zoom+'">'+treeMarkup(root)+'</div></div>';
   h+='<p class="note" style="margin-top:8px">Scroll or pinch to zoom, drag to move around, tap anyone for their details. Each marriage is shown, with its children hanging from between that couple.</p>';
@@ -1996,7 +2011,7 @@ document.addEventListener('click',function(e){
       break;
     case 'orient':ui.orient=t.dataset.o;lsSet('fl-orient',ui.orient);render();break;
     case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;render();break;
-    case 'calmode':ui.calMode=t.dataset.m;lsSet('fl-calmode',ui.calMode);gotoMonthOf(ui.sel);render();break;
+    case 'calmode':ui.calMode=t.dataset.m;lsSet('fl-calmode',ui.calMode);gotoMonthOf(ui.sel);if(ui.view==='tree') ui.zoomFit=true;render();break;
     case 'calspan':ui.calSpan=t.dataset.s;lsSet('fl-calspan',ui.calSpan);gotoMonthOf(ui.sel);render();break;
     case 'cal-prev':case 'cal-next':
       var fwd=act==='cal-next';
