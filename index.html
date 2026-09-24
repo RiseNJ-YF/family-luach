@@ -499,7 +499,7 @@ function normalize(d){
   d=d||{};var m=d.meta||{};
   return {meta:{familyName:String(m.familyName||'Our Family'),example:!!m.example},
     people:Array.isArray(d.people)?d.people.map(normPerson):[],
-    marriages:Array.isArray(d.marriages)?d.marriages.filter(function(x){return x&&x.a&&x.b;}).map(function(x){return {id:String(x.id||uid('m')),a:String(x.a),b:String(x.b),date:parseISO(x.date)?x.date:'',sunset:!!x.sunset,divorced:!!x.divorced};}):[]};
+    marriages:Array.isArray(d.marriages)?d.marriages.filter(function(x){return x&&x.a&&(x.b||x.date||x.nameHe||x.nameEn);}).map(function(x){return {id:String(x.id||uid('m')),a:String(x.a),b:String(x.b||''),date:parseISO(x.date)?x.date:'',sunset:!!x.sunset,divorced:!!x.divorced,nameHe:String(x.nameHe||''),nameEn:String(x.nameEn||'')};}):[]};
 }
 function readData(){try{return normalize(JSON.parse($('#family-data').textContent));}catch(e){return normalize({});}}
 var saved=readData();
@@ -510,8 +510,12 @@ function reindex(){
   var byId={},kids={},spouses={};
   data.people.forEach(function(p){byId[p.id]=p;kids[p.id]=[];spouses[p.id]=[];});
   data.people.forEach(function(p){p.parents.forEach(function(x){if(kids[x]&&kids[x].indexOf(p.id)<0) kids[x].push(p.id);});});
-  data.marriages.forEach(function(m){if(byId[m.a]&&byId[m.b]){spouses[m.a].push({pid:m.b,m:m});spouses[m.b].push({pid:m.a,m:m});}});
-  idx={byId:byId,kids:kids,spouses:spouses};
+  var solo={};
+  data.marriages.forEach(function(m){
+    if(byId[m.a]&&byId[m.b]){spouses[m.a].push({pid:m.b,m:m});spouses[m.b].push({pid:m.a,m:m});}
+    else if(byId[m.a]) (solo[m.a]=solo[m.a]||[]).push(m);
+  });
+  idx={byId:byId,kids:kids,spouses:spouses,solo:solo};
   Object.keys(kids).forEach(function(k){kids[k].sort(byBirth);});
   Object.keys(spouses).forEach(function(k){spouses[k].sort(function(a,b){var x=a.m.date||'9999',y=b.m.date||'9999';return x<y?-1:x>y?1:0;});});
 }
@@ -527,6 +531,10 @@ function nameHTML(p,zl){
   return hn?'<bdi class="hn" dir="rtl" lang="he">'+hebPartsHTML(p)+(z?' <span class="np">ז״ל</span>':'')+'</bdi>':esc(fullName(p))+(z?' <span class="zl">ז״ל</span>':'');
 }
 function kidsOf(id){return (idx.kids[id]||[]).slice();}
+/* Marriages whose spouse isn't in the family list (just a wedding date and maybe a typed name). */
+function soloOf(id){return (idx.solo&&idx.solo[id])||[];}
+function soloName(m){return (m.nameHe||m.nameEn||'').trim();}
+function snHTML(n){return /[\u0590-\u05FF]/.test(n)?'<bdi class="hn" dir="rtl" lang="he">'+esc(n)+'</bdi>':esc(n);}
 /* Spouses in marriage order (by wedding date; undated last). */
 function spousesOf(id){return idx.spouses[id]||[];}
 function otherParent(kid,id){var k=P(kid);return k?(k.parents.filter(function(x){return x!==id&&P(x);})[0]||''):'';}
@@ -596,9 +604,10 @@ function eventsBetween(a0,a1){
   });
   data.marriages.forEach(function(m){
     var md=parseISO(m.date),A=P(m.a),B=P(m.b);
-    if(!md||m.divorced||!A||!B||A.deceased||B.deceased) return;
-    for(y=gy0;y<=gy1;y++) if(y>md.y) push(gAnniv(md,y),{kind:'anniversary',cal:'greg',pids:[m.a,m.b],n:y-md.y});
-    var mh=hebOf(m.date,m.sunset);for(y=hy0;y<=hy1;y++) if(y>mh.y) push(hebAnniv(mh,y),{kind:'anniversary',cal:'heb',pids:[m.a,m.b],n:y-mh.y,h:mh});
+    if(!md||m.divorced||!A||A.deceased||(B&&B.deceased)) return;
+    var pids=B?[m.a,m.b]:[m.a],sn=B?'':soloName(m);
+    for(y=gy0;y<=gy1;y++) if(y>md.y) push(gAnniv(md,y),{kind:'anniversary',cal:'greg',pids:pids,sn:sn,n:y-md.y});
+    var mh=hebOf(m.date,m.sunset);for(y=hy0;y<=hy1;y++) if(y>mh.y) push(hebAnniv(mh,y),{kind:'anniversary',cal:'heb',pids:pids,sn:sn,n:y-mh.y,h:mh});
   });
   for(y=hy0;y<=hy1;y++) HOLIDAYS.forEach(function(h){
     var m=h[0]==='adar'?H.months(y):h[0];var a=H.toAbs(y,m,h[1]);
@@ -612,7 +621,7 @@ function eventsBetween(a0,a1){
 function visible(e){if(!prefs.kinds[e.kind]) return false;if(e.kind==='holiday') return true;return e.cal==='greg'?prefs.greg:prefs.heb;}
 function kkey(e){return e.kind==='birthday'&&e.cal==='heb'?'hbirthday':e.kind;}
 function kindClass(e){return 'k-'+kkey(e);}
-function names(e){return e.pids.map(function(id){return nameHTML(P(id));}).join(' & ');}
+function names(e){return e.pids.map(function(id){return nameHTML(P(id));}).join(' & ')+(e.sn?' & '+snHTML(e.sn):'');}
 function evTitle(e){
   var p=P(e.pids[0]);
   switch(e.kind){
@@ -791,7 +800,7 @@ function viewUpcoming(){
   h+='</div><aside class="side">';
   h+='<div class="block"><h4>Show</h4>'+filtersHTML()+'</div>';
   var living=data.people.filter(function(p){return !p.deceased;}).length;
-  var couples=data.marriages.filter(function(m){var a=P(m.a),b=P(m.b);return a&&b&&!m.divorced&&!a.deceased&&!b.deceased;}).length;
+  var couples=data.marriages.filter(function(m){var a=P(m.a),b=P(m.b);return a&&!m.divorced&&!a.deceased&&!(b&&b.deceased);}).length;
   var gens=0;data.people.forEach(function(p){if(!p.parents.some(function(x){return P(x);})){var c=genCounts(p.id).length+1;if(c>gens) gens=c;}});
   h+='<div class="block"><h4>The family</h4><div class="stats"><div class="stat"><b class="num">'+data.people.length+'</b><span>people</span></div><div class="stat"><b class="num">'+living+'</b><span>living</span></div><div class="stat"><b class="num">'+couples+'</b><span>married couples</span></div><div class="stat"><b class="num">'+gens+'</b><span>generations</span></div></div></div>';
   h+='<div class="block"><h4>Reading the dates</h4><div class="legend"><div><span class="hmark" style="color:var(--ink-2)">א</span>Falls on the Hebrew date, so it moves each English year.</div><div class="note">Hebrew dates begin at sundown the evening before. People born or married after sunset are marked in their details.</div></div></div>';
@@ -936,6 +945,8 @@ function tcard(p,isRoot,placed){
   }
   if(dates) h+='<span class="td num">'+esc(dates)+'</span>';
   if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gc[1]?' · '+gc[1]+' grand':'')+'</span>';
+  var so=soloOf(p.id);
+  if(so.length) h+='<span class="tk">⚭ '+so.map(function(m){return soloName(m)?esc(soloName(m)):'married';}).join(', ')+'</span>';
   h+='</button></div>';
   return h;
 }
@@ -1122,7 +1133,7 @@ function peopleCards(){
   if(!list.length) return '<p class="note">No one matches “'+esc(ui.q)+'”.</p>';
   return list.map(function(p){
     var gc=genCounts(p.id),line=lifeLine(p),hn=hebNameZl(p);
-    var sp=spousesOf(p.id).filter(function(s){return !s.m.divorced;}).map(function(s){return primaryText(P(s.pid));});
+    var sp=spousesOf(p.id).filter(function(s){return !s.m.divorced;}).map(function(s){return primaryText(P(s.pid));}).concat(soloOf(p.id).filter(function(m){return !m.divorced&&soloName(m);}).map(soloName));
     var h='<button class="pcard" data-act="open" data-pid="'+esc(p.id)+'"><span class="pn">'+nameHTML(p,true)+'</span>';
     if(hn) h+='<span class="ph">'+esc(fullName(p))+'</span>';
     if(line) h+='<span class="pl">'+esc(line)+'</span>';
@@ -1185,7 +1196,13 @@ function drawerView(p){
     if(editable()) h+='<button class="btn sm" data-act="add-rel" data-r="child" data-pid="'+esc(p.id)+'" data-sp="'+esc(s.pid)+'">Add child with '+nameHTML(other)+'</button>';
     h+='</div></div>';
   });
-  else h+='<div class="rl"><span>Spouse</span><div><span class="note">None listed</span></div></div>';
+  var so=soloOf(p.id);
+  so.forEach(function(m){
+    var line=m.divorced?'Divorced':(m.date?'Married '+fmtG(isoAbs(m.date)):'Married'),extra='';
+    if(m.date&&!m.divorced&&!p.deceased){var md=parseISO(m.date),na=nextGreg(m.date),yrs=gFromAbs(na).y-md.y;extra='<div class="note">'+ord(yrs)+' anniversary '+rel(na)+' · '+esc(fmtG(na,{wd:true,yr:false}))+'</div><div class="note">Hebrew date: '+esc(fmtH(hebOf(m.date,m.sunset),false))+' · '+heSpan(hebOf(m.date,m.sunset),false)+'</div>';}
+    h+='<div class="rl"><span>Spouse</span><div>'+(soloName(m)?'<b>'+snHTML(soloName(m))+'</b> ':'')+'<span class="note">(not in the family list)</span><div class="note" style="margin-top:4px">'+esc(line)+'</div>'+extra+'</div></div>';
+  });
+  if(!sp.length&&!so.length) h+='<div class="rl"><span>Spouse</span><div><span class="note">None listed</span></div></div>';
   h+='<div class="rl"><span>Father</span><div>'+(pr.father?chipsFor([pr.father.id]):(p.fatherHeb?'<span class="he" dir="rtl" lang="he">'+esc(p.fatherHeb)+'</span> <span class="note">(not in the family list)</span>':'<span class="note">Not listed</span>'))+'</div></div>';
   h+='<div class="rl"><span>Mother</span><div>'+(pr.mother?chipsFor([pr.mother.id]):(p.motherHeb?'<span class="he" dir="rtl" lang="he">'+esc(p.motherHeb)+'</span> <span class="note">(not in the family list)</span>':'<span class="note">Not listed</span>'))+'</div></div>';
   var sib=siblingsOf(p.id);if(sib.length) h+='<div class="rl"><span>Siblings</span><div>'+chipsFor(sib,ageNote)+'</div></div>';
@@ -1224,7 +1241,8 @@ function newDraft(){return {id:null,first:'',last:'',gender:'',hebFirst:'',hebLa
 function draftFrom(p){
   var d=JSON.parse(JSON.stringify(p)),pr=parentsOf(p);
   d.father=pr.father?pr.father.id:'';d.mother=pr.mother?pr.mother.id:'';
-  d.marriages=spousesOf(p.id).map(function(s){return {id:s.m.id,spouse:s.pid,date:s.m.date,sunset:s.m.sunset,divorced:s.m.divorced};});
+  d.marriages=spousesOf(p.id).map(function(s){return {id:s.m.id,spouse:s.pid,date:s.m.date,sunset:s.m.sunset,divorced:s.m.divorced,nameHe:'',nameEn:''};})
+    .concat(soloOf(p.id).map(function(m){return {id:m.id,spouse:'',date:m.date,sunset:m.sunset,divorced:m.divorced,nameHe:m.nameHe,nameEn:m.nameEn};}));
   return d;
 }
 function personOptions(sel,excl,gender){
@@ -1285,9 +1303,10 @@ function drawerEdit(){
   h+='<div class="fsec"><h4>Marriages</h4>';
   d.marriages.forEach(function(m,i){
     h+='<div class="subrow" data-mrow="'+i+'"><div class="subrow-top">'+(d.marriages.length>1?'<span class="ordl">'+ord(i+1)+'</span>':'')+'<select class="inp" id="m-sp-'+i+'" data-mf="spouse" aria-label="Spouse">'+spouseOptions(m.spouse,d.id,d.gender)+'</select><button type="button" class="btn sm ghost" data-act="rm-marriage" data-i="'+i+'">Remove</button></div>';
+    h+='<div class="fgrid" id="m-nm-'+i+'"'+(m.spouse?' hidden':'')+'><div class="field"><label for="m-nh-'+i+'">Spouse’s Hebrew name (optional)</label><input class="inp he" dir="rtl" lang="he" id="m-nh-'+i+'" value="'+esc(m.nameHe||'')+'" autocomplete="off"></div><div class="field"><label for="m-ne-'+i+'">Spouse’s English name (optional)</label><input class="inp" id="m-ne-'+i+'" value="'+esc(m.nameEn||'')+'" autocomplete="off"></div></div>';
     h+=dateField('m'+i,'Wedding date',m.date,m.sunset,'<label class="check"><input type="checkbox" id="m-dv-'+i+'" data-mf="divorced"'+(m.divorced?' checked':'')+'>Divorced</label>')+'</div>';
   });
-  h+='<div><button type="button" class="btn sm" data-act="add-marriage">'+(d.marriages.length?'Add another marriage':'Add a marriage')+'</button> <span class="note">Marriages are ordered by wedding date. The spouse must already be in the family list.</span></div></div>';
+  h+='<div><button type="button" class="btn sm" data-act="add-marriage">'+(d.marriages.length?'Add another marriage':'Add a marriage')+'</button> <span class="note">Pick the spouse from the family list — or leave “Not in the list”, type their name if you like, and just add the wedding date.</span></div></div>';
   h+='<div class="fsec"><h4>Other yearly dates</h4>';
   d.others.forEach(function(o,i){
     h+='<div class="subrow" data-orow="'+i+'"><div class="subrow-top"><input class="inp" id="o-t-'+i+'" data-of="title" value="'+esc(o.title)+'" placeholder="e.g. Aliyah, Bar Mitzvah, Graduation" aria-label="What happened"><button type="button" class="btn sm ghost" data-act="rm-other" data-i="'+i+'">Remove</button></div>'+dateField('o'+i,'Date',o.date,o.sunset)+'</div>';
@@ -1312,7 +1331,7 @@ function syncDraft(){
   d.birth=$('#d-birth').value;d.birthSunset=$('#s-birth').checked;
   var de=$('#d-death');if(de){d.death=de.value;d.deathSunset=$('#s-death').checked;}
   d.father=$('#f-father').value;d.mother=$('#f-mother').value;
-  d.marriages=$$('[data-mrow]',f).map(function(r){var i=r.dataset.mrow,old=d.marriages[+i]||{};return {id:old.id||null,spouse:$('#m-sp-'+i).value,date:$('#d-m'+i).value,sunset:$('#s-m'+i).checked,divorced:$('#m-dv-'+i).checked};});
+  d.marriages=$$('[data-mrow]',f).map(function(r){var i=r.dataset.mrow,old=d.marriages[+i]||{};return {id:old.id||null,spouse:$('#m-sp-'+i).value,date:$('#d-m'+i).value,sunset:$('#s-m'+i).checked,divorced:$('#m-dv-'+i).checked,nameHe:($('#m-nh-'+i)||{}).value||'',nameEn:($('#m-ne-'+i)||{}).value||''};});
   d.others=$$('[data-orow]',f).map(function(r){var i=r.dataset.orow;return {title:$('#o-t-'+i).value,date:$('#d-o'+i).value,sunset:$('#s-o'+i).checked};});
 }
 function applyDraft(){
@@ -1327,9 +1346,11 @@ function applyDraft(){
   else data.people[data.people.findIndex(function(x){return x.id===id;})]=p;
   var keep={};
   d.marriages.forEach(function(m){
-    if(!m.spouse||m.spouse===id) return;
+    var nh=(m.nameHe||'').trim(),ne=(m.nameEn||'').trim();
+    if(m.spouse===id) return;
+    if(!m.spouse&&!parseISO(m.date)&&!nh&&!ne) return;
     var ex=m.id&&data.marriages.find(function(x){return x.id===m.id;});
-    var rec={id:ex?ex.id:uid('m'),a:id,b:m.spouse,date:parseISO(m.date)?m.date:'',sunset:!!m.sunset,divorced:!!m.divorced};
+    var rec={id:ex?ex.id:uid('m'),a:id,b:m.spouse||'',date:parseISO(m.date)?m.date:'',sunset:!!m.sunset,divorced:!!m.divorced,nameHe:m.spouse?'':nh,nameEn:m.spouse?'':ne};
     if(ex) Object.assign(ex,rec); else data.marriages.push(rec);
     keep[rec.id]=1;
   });
@@ -1497,7 +1518,7 @@ function exportSpec(kind){
       var b=parseISO(p.birth),gc=genCounts(p.id),hb=b&&!p.birthNoYear?hebOf(p.birth,p.birthSunset):null;
       var born=b?(p.birthNoYear?fmtMD(b):fmtG(isoAbs(p.birth)))+(hb?'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hb))+'</span>':''):'';
       var age=p.deceased?'ז״ל':(ageAt(p,TODAY)!=null?String(ageAt(p,TODAY)):'');
-      var sp=spousesOf(p.id).map(function(s){return primaryText(P(s.pid))+(s.m.divorced?' (div.)':'');}).join(', ');
+      var sp=spousesOf(p.id).map(function(s){return primaryText(P(s.pid))+(s.m.divorced?' (div.)':'');}).concat(soloOf(p.id).filter(function(m){return soloName(m);}).map(function(m){return soloName(m)+(m.divorced?' (div.)':'');})).join(', ');
       return {html:'<div class="px-prow"><span class="n">'+nameHTML(p,true)+(p.phone?'<br><span style="font-weight:400;color:#77818D">'+esc(p.phone)+'</span>':'')+'</span><span>'+(hebName(p)?esc(fullName(p)):'')+'</span><span>'+born+'</span><span>'+esc(age)+'</span><span>'+esc(sp)+'</span><span>'+(gc[0]||0)+'</span><span>'+(gc[1]||0)+'</span></div>'};
     });
   } else {
@@ -1669,6 +1690,12 @@ function nameText(p,zl){
 /* A couple in a small box: "שמואל ואסתר לוין" (or "Shmuel & Esther Levin" without Hebrew names). */
 function coupleText(e){
   var ps=e.pids.map(P);
+  if(ps.length===1){
+    var p=ps[0],sn=e.sn||'',full=/\s/.test(sn);
+    if(p.hebFirst&&(!sn||/[֐-׿]/.test(sn))){var hl=p.hebLast?' '+p.hebLast:'';return full?p.hebFirst+hl+' ו'+sn:p.hebFirst+(sn?' ו'+sn:'')+hl;}
+    var el=p.last?' '+p.last:'';
+    return full?firstName(p)+el+' & '+sn:firstName(p)+(sn?' & '+sn:'')+el;
+  }
   if(ps.every(function(p){return p&&p.hebFirst;})){var last=ps[0].hebLast||ps[1].hebLast||'';return ps[0].hebFirst+' ו'+ps[1].hebFirst+(last?' '+last:'');}
   return ps.map(firstName).join(' & ')+(ps[0].last?' '+ps[0].last:'');
 }
@@ -2076,7 +2103,7 @@ document.addEventListener('click',function(e){
         label=(r==='father'?'Father':'Mother')+' of '+primaryText(base);
       }
       drawer={mode:'edit',draft:dr,link:{type:r,of:pid,label:label}};renderDrawer();break;
-    case 'add-marriage':syncDraft();drawer.draft.marriages.push({id:null,spouse:'',date:'',sunset:false,divorced:false});drawer.keepScroll=true;renderDrawer();break;
+    case 'add-marriage':syncDraft();drawer.draft.marriages.push({id:null,spouse:'',date:'',sunset:false,divorced:false,nameHe:'',nameEn:''});drawer.keepScroll=true;renderDrawer();break;
     case 'rm-marriage':syncDraft();drawer.draft.marriages.splice(+t.dataset.i,1);drawer.keepScroll=true;renderDrawer();break;
     case 'add-other':syncDraft();drawer.draft.others.push({title:'',date:'',sunset:false});drawer.keepScroll=true;renderDrawer();break;
     case 'rm-other':syncDraft();drawer.draft.others.splice(+t.dataset.i,1);drawer.keepScroll=true;renderDrawer();break;
@@ -2120,6 +2147,7 @@ document.addEventListener('change',function(e){
   if(t.id==='f-deceased'){$('#death-wrap').hidden=!t.checked;refreshHebPreview();return;}
   if(t.name==='f-gender'){syncDraft();drawer.keepScroll=true;renderDrawer();return;}
   if(t.id==='f-father'||t.id==='f-mother'){refreshHebPreview();return;}
+  if(/^m-sp-\d+$/.test(t.id)){var nm=$('#m-nm-'+t.id.slice(5));if(nm) nm.hidden=!!t.value;return;}
   if(t.id==='import-file'&&t.files&&t.files[0]){importData(t.files[0]);t.value='';return;}
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;ui.zoomFit=true;render();}
