@@ -482,7 +482,7 @@ function normPerson(p){
   }
   return {id:String(p.id||uid('p')),first:String(p.first||''),last:String(p.last||''),gender:gender,
     hebFirst:String(hebFirst||''),hebLast:String(hebLast||''),fatherHeb:String(fatherHeb||''),motherHeb:String(motherHeb||''),
-    birth:parseISO(p.birth)?p.birth:'',birthSunset:!!p.birthSunset,birthNoYear:!!p.birthNoYear,
+    birth:parseISO(p.birth)?p.birth:'',birthSunset:!!p.birthSunset,birthNoYear:!!p.birthNoYear,hideAge:!!p.hideAge,
     deceased:!!p.deceased,death:parseISO(p.death)?p.death:'',deathSunset:!!p.deathSunset,
     parents:Array.isArray(p.parents)?p.parents.filter(Boolean).map(String).slice(0,2):[],
     others:Array.isArray(p.others)?p.others.map(function(o){return {title:String(o.title||''),date:parseISO(o.date)?o.date:'',sunset:!!o.sunset};}):[],
@@ -559,6 +559,8 @@ function genCounts(id){
   for(var g=0;g<8;g++){var next=[];level.forEach(function(x){kidsOf(x).forEach(function(c){if(!seen[c]){seen[c]=1;next.push(c);}});});if(!next.length) break;counts.push(next.length);level=next;}
   return counts;
 }
+/* A person can ask not to have their age (or birth year) printed in PDFs; the app screen still shows it. */
+function noAge(p){return !!(p&&p.hideAge);}
 function ageAt(p,atAbs){var b=parseISO(p.birth);if(!b||p.birthNoYear) return null;var t=gFromAbs(atAbs);var n=t.y-b.y;if(t.m<b.m||(t.m===b.m&&t.d<b.d)) n--;return n;}
 function nextGreg(iso){var b=parseISO(iso);if(!b) return null;var y=gFromAbs(TODAY).y;var a=gAnniv(b,y);if(a<TODAY) a=gAnniv(b,y+1);return a;}
 function nextHeb(h,fn){var ty=H.fromAbs(TODAY).y;var a=fn(h,ty);if(a<TODAY) a=fn(h,ty+1);return a;}
@@ -634,10 +636,10 @@ function evShort(e){
     default:return esc(e.title);
   }
 }
-function evSub(e){
+function evSub(e,pdf){
   var bits=[];
   if(e.cal==='heb'&&e.h) bits.push(esc(fmtH(e.h,false))+' · '+'<span class="he" dir="rtl" lang="he">'+esc(fmtHe(e.h,false))+'</span>');
-  if(e.kind==='birthday'&&e.n!=null) bits.push('turns '+e.n);
+  if(e.kind==='birthday'&&e.n!=null&&!(pdf&&noAge(P(e.pids[0])))) bits.push('turns '+e.n);
   if(e.kind==='anniversary') bits.push(ord(e.n)+' anniversary');
   if(e.kind==='yahrzeit') bits.push(e.cal==='heb'?ord(e.n)+' yahrzeit · begins at sundown '+esc(fmtG(e.abs-1,{wd:true,yr:false})):e.n+(e.n===1?' year':' years')+' since passing');
   if(e.kind==='other') bits.push(e.n+(e.n===1?' year':' years'));
@@ -919,9 +921,10 @@ function treeRoots(){
 }
 function countDesc(id){return genCounts(id).reduce(function(a,b){return a+b;},0);}
 function coupleLabel(p){return chainOf(p.id,{}).map(function(id){return primaryText(P(id));}).join(' & ');}
-function tcard(p,isRoot,placed){
+function tcard(p,isRoot,placed,pdf){
   var b=parseISO(p.birth),d=parseISO(p.death),dates='';
-  if(p.deceased) dates=(b&&!p.birthNoYear?b.y:'?')+' – '+(d?d.y:'?');
+  if(pdf&&noAge(p)) dates=p.deceased?(d?'? – '+d.y:''):(b?'Birthday '+fmtMD(b):'');
+  else if(p.deceased) dates=(b&&!p.birthNoYear?b.y:'?')+' – '+(d?d.y:'?');
   else if(b&&!p.birthNoYear) dates=b.y+' · age '+ageAt(p,TODAY);
   else if(b) dates='Birthday '+fmtMD(b);
   var gc=genCounts(p.id),k=gc[0]||0,hn=hebName(p);
@@ -1064,7 +1067,7 @@ function mirrorTree(L){
   });
   return L;
 }
-function treeMarkup(root){
+function treeMarkup(root,pdf){
   var L=layoutFam(root,{},0),placed={},h='';
   if(ui.calMode==='heb') mirrorTree(L);
   L.items.forEach(function(it){if(it.t==='card') placed[it.id]=1;});
@@ -1077,7 +1080,7 @@ function treeMarkup(root){
   L.items.forEach(function(it){
     var y=it.y+TPAD;
     if(it.t==='ring') h+='<span class="fring'+(it.ended?' ended':'')+'" style="left:'+it.x+'px;top:'+y+'px" title="'+esc(it.title)+'">⚭'+(it.label?'<small>'+it.label+'</small>':'')+'</span>';
-    else if(it.t==='card') h+='<div class="fcell" style="left:'+it.x+'px;top:'+y+'px">'+tcard(P(it.id),it.id===root,placed)+'</div>';
+    else if(it.t==='card') h+='<div class="fcell" style="left:'+it.x+'px;top:'+y+'px">'+tcard(P(it.id),it.id===root,placed,pdf)+'</div>';
   });
   return '<div class="ftree" style="width:'+Math.ceil(L.w)+'px;height:'+Math.ceil(L.h+TPAD+4)+'px">'+h+'</div>';
 }
@@ -1232,7 +1235,7 @@ function drawerView(p){
 function ageNote(p){if(p.deceased) return '';var a=ageAt(p,TODAY);return a!=null?String(a):'';}
 
 /* ---------- Drawer: edit form ---------- */
-function newDraft(){return {id:null,first:'',last:'',gender:'',hebFirst:'',hebLast:'',fatherHeb:'',motherHeb:'',birth:'',birthSunset:false,birthNoYear:false,deceased:false,death:'',deathSunset:false,father:'',mother:'',marriages:[],others:[],phone:'',email:'',notes:''};}
+function newDraft(){return {id:null,first:'',last:'',gender:'',hebFirst:'',hebLast:'',fatherHeb:'',motherHeb:'',birth:'',birthSunset:false,birthNoYear:false,hideAge:false,deceased:false,death:'',deathSunset:false,father:'',mother:'',marriages:[],others:[],phone:'',email:'',notes:''};}
 function draftFrom(p){
   var d=JSON.parse(JSON.stringify(p)),pr=parentsOf(p);
   d.father=pr.father?pr.father.id:'';d.mother=pr.mother?pr.mother.id:'';
@@ -1287,7 +1290,7 @@ function drawerEdit(){
   h+='<div class="fgrid"><div class="field"><label for="f-first">First name</label><input class="inp" id="f-first" data-f="first" value="'+esc(d.first)+'" autocomplete="off"></div><div class="field"><label for="f-last">Last name</label><input class="inp" id="f-last" data-f="last" value="'+esc(d.last)+'" autocomplete="off"></div></div>';
   h+='<div class="fgrid"><div class="field"><label for="f-hebFirst">Hebrew first name</label><input class="inp he" dir="rtl" lang="he" id="f-hebFirst" data-f="hebFirst" data-hn="1" value="'+esc(d.hebFirst)+'" placeholder="דוד" autocomplete="off"></div><div class="field"><label for="f-hebLast">Hebrew last name</label><input class="inp he" dir="rtl" lang="he" id="f-hebLast" data-f="hebLast" data-hn="1" value="'+esc(d.hebLast)+'" placeholder="כהן" autocomplete="off"></div></div>';
   h+='<div class="hebprev" id="hebprev">'+hebPreviewHTML(d)+'</div>';
-  h+='<div class="fsec"><h4>Birth</h4>'+dateField('birth','Date of birth',d.birth,d.birthSunset,'<label class="check"><input type="checkbox" id="f-noyear" data-f="birthNoYear"'+(d.birthNoYear?' checked':'')+'>Year unknown</label>')+'</div>';
+  h+='<div class="fsec"><h4>Birth</h4>'+dateField('birth','Date of birth',d.birth,d.birthSunset,'<label class="check"><input type="checkbox" id="f-noyear" data-f="birthNoYear"'+(d.birthNoYear?' checked':'')+'>Year unknown</label><label class="check"><input type="checkbox" id="f-hideage" data-f="hideAge"'+(d.hideAge?' checked':'')+'>Don’t show age in PDFs</label>')+'</div>';
   h+='<div class="fsec"><h4>Passed away</h4><label class="check"><input type="checkbox" id="f-deceased" data-f="deceased" data-hn="1"'+(d.deceased?' checked':'')+'>This person has passed away</label><div id="death-wrap"'+(d.deceased?'':' hidden')+'>'+dateField('death','Date of passing (for the yahrzeit)',d.death,d.deathSunset)+'</div></div>';
   h+='<div class="fsec"><h4>Parents</h4><div class="fgrid">';
   h+='<div class="field"><label for="f-father">Father</label><select class="inp" id="f-father" data-hn="1">'+personOptions(d.father,d.id,'m')+'</select>';
@@ -1336,7 +1339,7 @@ function applyDraft(){
   if(!d.gender){drawer.err='Choose male or female.';drawer.keepScroll=true;renderDrawer();return;}
   var isNew=!d.id,id=d.id||uid('p');
   var par=[d.father,d.mother].filter(function(x,i,a){return x&&x!==id&&a.indexOf(x)===i;});
-  var p=normPerson({id:id,first:d.first.trim(),last:d.last.trim(),gender:d.gender,hebFirst:d.hebFirst.trim(),hebLast:d.hebLast.trim(),fatherHeb:d.father?'':d.fatherHeb.trim(),motherHeb:d.mother?'':d.motherHeb.trim(),birth:d.birth,birthSunset:d.birthSunset,birthNoYear:d.birthNoYear,deceased:d.deceased,death:d.deceased?d.death:'',deathSunset:d.deceased&&d.deathSunset,parents:par,others:d.others.filter(function(o){return o.date||o.title.trim();}).map(function(o){return {title:o.title.trim(),date:o.date,sunset:o.sunset};}),phone:d.phone.trim(),email:d.email.trim(),notes:d.notes});
+  var p=normPerson({id:id,first:d.first.trim(),last:d.last.trim(),gender:d.gender,hebFirst:d.hebFirst.trim(),hebLast:d.hebLast.trim(),fatherHeb:d.father?'':d.fatherHeb.trim(),motherHeb:d.mother?'':d.motherHeb.trim(),birth:d.birth,birthSunset:d.birthSunset,birthNoYear:d.birthNoYear,hideAge:!!d.hideAge,deceased:d.deceased,death:d.deceased?d.death:'',deathSunset:d.deceased&&d.deathSunset,parents:par,others:d.others.filter(function(o){return o.date||o.title.trim();}).map(function(o){return {title:o.title.trim(),date:o.date,sunset:o.sunset};}),phone:d.phone.trim(),email:d.email.trim(),notes:d.notes});
   if(isNew) data.people.push(p);
   else data.people[data.people.findIndex(function(x){return x.id===id;})]=p;
   var keep={};
@@ -1443,7 +1446,7 @@ function pxLegend(){
 }
 function pxRow(e,showWhen){
   var g=gFromAbs(e.abs),hh=H.fromAbs(e.abs);
-  return '<div class="px-row"><div class="px-d"><b>'+g.d+'</b>'+GMS[g.m-1]+' · '+WDS[dow(e.abs)]+'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hh,false))+'</span></div><div class="px-bar" style="background:'+KHEX[kkey(e)]+'"></div><div class="px-t"><div class="px-tt">'+evTitle(e)+'</div><div class="px-ts">'+evSub(e)+'</div></div>'+(showWhen?'<div class="px-w">'+rel(e.abs)+'</div>':'')+'</div>';
+  return '<div class="px-row"><div class="px-d"><b>'+g.d+'</b>'+GMS[g.m-1]+' · '+WDS[dow(e.abs)]+'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hh,false))+'</span></div><div class="px-bar" style="background:'+KHEX[kkey(e)]+'"></div><div class="px-t"><div class="px-tt">'+evTitle(e)+'</div><div class="px-ts">'+evSub(e,true)+'</div></div>'+(showWhen?'<div class="px-w">'+rel(e.abs)+'</div>':'')+'</div>';
 }
 function listBlocks(a0,a1,showWhen,byHebMonth){
   var out=[],cur=null;
@@ -1504,15 +1507,15 @@ function exportSpec(kind){
     spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub;spec.file='Calendar '+mt.t;spec.body=pxMonthGrid(PW-80);
   } else if(ui.view==='tree'){
     var root=currentRoot();
-    spec.fit=true;spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';spec.body=treeMarkup(root);
+    spec.fit=true;spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';spec.body=treeMarkup(root,true);
   } else if(ui.view==='people'){
     spec.title='Family directory · '+data.people.length+' people';spec.file='Family directory';
     spec.pageHead='<div class="px-prow h"><span>Name</span><span>English name</span><span>Born</span><span>Age</span><span>Married to</span><span>Children</span><span>Grandchildren</span></div>';
     var list=data.people.slice().sort(function(a,b){var x=(a.last+' '+a.first).toLowerCase(),y=(b.last+' '+b.first).toLowerCase();return x<y?-1:x>y?1:0;});
     spec.blocks=list.map(function(p){
-      var b=parseISO(p.birth),gc=genCounts(p.id),hb=b&&!p.birthNoYear?hebOf(p.birth,p.birthSunset):null;
-      var born=b?(p.birthNoYear?fmtMD(b):fmtG(isoAbs(p.birth)))+(hb?'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hb))+'</span>':''):'';
-      var age=p.deceased?'ז״ל':(ageAt(p,TODAY)!=null?String(ageAt(p,TODAY)):'');
+      var b=parseISO(p.birth),gc=genCounts(p.id),hb=b&&!p.birthNoYear?hebOf(p.birth,p.birthSunset):null,na=noAge(p);
+      var born=b?(p.birthNoYear||na?fmtMD(b):fmtG(isoAbs(p.birth)))+(hb?'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hb,!na))+'</span>':''):'';
+      var age=p.deceased?'ז״ל':(!na&&ageAt(p,TODAY)!=null?String(ageAt(p,TODAY)):'');
       var sp=spousesOf(p.id).map(function(s){return primaryText(P(s.pid))+(s.m.divorced?' (div.)':'');}).concat(soloOf(p.id).filter(function(m){return soloName(m);}).map(function(m){return soloName(m)+(m.divorced?' (div.)':'');})).join(', ');
       return {html:'<div class="px-prow"><span class="n">'+nameHTML(p,true)+(p.phone?'<br><span style="font-weight:400;color:#77818D">'+esc(p.phone)+'</span>':'')+'</span><span>'+(hebName(p)?esc(fullName(p)):'')+'</span><span>'+born+'</span><span>'+esc(age)+'</span><span>'+esc(sp)+'</span><span>'+(gc[0]||0)+'</span><span>'+(gc[1]||0)+'</span></div>'};
     });
@@ -1697,7 +1700,7 @@ function coupleText(e){
 function wallSegs(e){
   var p=P(e.pids[0]),segs=e.cal==='heb'&&ui.calMode!=='heb'?[{t:'א ',c:'#6A4899',b:true}]:[];
   switch(e.kind){
-    case 'birthday':segs=segs.concat(nameSegs(p));if(e.n!=null) segs.push({t:' · '+e.n});break;
+    case 'birthday':segs=segs.concat(nameSegs(p));if(e.n!=null&&!noAge(p)) segs.push({t:' · '+e.n});break;
     case 'anniversary':segs.push({t:coupleText(e),b:true},{t:' · '+ord(e.n)});break;
     case 'yahrzeit':segs=segs.concat(nameSegs(p,true));segs.push({t:' · '+ord(e.n)});break;
     default:segs.push({t:(e.title||'Anniversary')+' · '});segs=segs.concat(nameSegs(p));
