@@ -1,0 +1,13 @@
+{
+  "name": "family-luach",
+  "private": true,
+  "description": "Family calendar and tree with English and Hebrew dates",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build:page": "node tools/build.js",
+    "dev": "node tools/dev-server.js"
+  },
+  "dependencies": {
+    "redis": "^4.7.0"
+  }
+}

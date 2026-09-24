@@ -3,51 +3,40 @@
 A private family calendar and family tree: birthdays, anniversaries and yahrzeits on both the English
 and Hebrew calendars, with printable PDFs (including a vector wall calendar for a plotter).
 
-**Site:** https://risenj-yf.github.io/family-luach/
+Hosted on **Vercel** (free plan), with the family data and accounts in a private Redis database
+connected through Vercel's Storage tab.
 
 ## Signing in
 
-Everyone signs in with a **username and password**. There are two kinds of accounts:
+Everyone signs in with a **username and password**:
 
 - **Viewer** — sees the calendar, family tree and people, and can export PDFs.
 - **Editor** — can also add and change people, save, and manage who can sign in.
 
-Editors add people, set their passwords and remove them in **Settings → People who can sign in**.
-Forgot a password? An editor sets a new one.
+Editors add people, set passwords and remove people in **Settings → People who can sign in**.
+Forgot a password? An editor sets a new one. Removing someone or resetting their password signs them
+out everywhere immediately.
 
-## How privacy works
-
-This repository is public, but nothing personal in it is readable:
-
-- `index.html` is the app. It contains only a made-up example family.
-- `family.enc.json` holds the real family data **encrypted** (AES-256-GCM) with a random family key.
-  Each account's password (PBKDF2-SHA256, 310,000 rounds) unlocks a copy of that key.
-  Editors' passwords also unlock the GitHub key the site uses to save.
-- Usernames are stored only as hashes. The family name is the one readable field — the sign-in
-  screen shows it.
-- All encryption happens in the browser; GitHub never sees passwords or readable data.
-
-## First-time setup (the first editor, once)
+## First-time setup (once)
 
 1. Open the site and click **Set it up (first editor)**.
-2. Follow step 1 on that screen to make a **GitHub key** (a fine-grained personal access token):
-   repository access **Only select repositories → family-luach**, permission **Contents: Read and write**,
-   the longest expiration offered. Paste it in.
-3. Choose your username and password, the family name, and optionally a data file from the Claude
-   version (Claude → Settings → **Download data file**).
-4. Click **Create the family site**, then add family members in Settings.
+2. Choose your username and password and the family name. Optionally attach a data file from the
+   Claude version (Claude → Settings → **Download data file**).
+3. Click **Create the family site**, then add family members in Settings.
 
-Nobody needs the GitHub key after that. If it expires, saving stops with a message; an editor makes
-a new key and pastes it in **Settings → GitHub key**.
+## How it works
 
-## Files
+- `index.html` — the app. It contains only a made-up example family; real data never goes into the
+  repository.
+- `api/` — small serverless functions: sign-in (`login`, `logout`, `state`), first-time `setup`,
+  the family `data` (anyone signed in can read; editors save), and `users` (editors manage accounts).
+- Passwords are stored as scrypt hashes. Sign-in uses a signed, HttpOnly cookie that is re-checked
+  against the account list on every request. Ten wrong passwords lock a username for 15 minutes.
+- Data lives in the Redis database (`fl:data`, `fl:users`); nothing personal is in this repository.
 
-| Path | What it is |
-| --- | --- |
-| `index.html` | The website (built from `src/app.html`). |
-| `family.enc.json` | Encrypted family data and accounts — written by the site. |
-| `src/app.html` | App source. The same code also runs as the Claude artifact. |
-| `tools/build.js` | Builds `index.html` with the example family: `node tools/build.js` |
-| `tools/example.json` | The made-up example family. |
-| `tools/serve-test.js` | Local test server for a copy in `.test/` (git-ignored). |
-| `FONT-LICENSE-Alef.txt` | License for the embedded Alef font (SIL Open Font License 1.1). |
+## Changing the app
+
+- Source: `src/app.html` (the same code also runs as the Claude artifact).
+- Rebuild the page: `node tools/build.js` → commit → push. Vercel redeploys automatically.
+- Test locally without Vercel: `node tools/dev-server.js`, then open http://localhost:5393
+  (an in-memory database; nothing is saved when it stops).
