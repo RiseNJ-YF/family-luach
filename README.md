@@ -1,9 +1,9 @@
 # Family Luach
 
 A private family calendar and family tree: birthdays, anniversaries and yahrzeits on both the English
-**Site:** https://family-luach-beta.vercel.app/
-
 and Hebrew calendars, with printable PDFs (including a vector wall calendar for a plotter).
+
+**Site:** https://family-luach-beta.vercel.app/
 
 Hosted on **Vercel** (free plan), with the family data and accounts in a private Redis database
 connected through Vercel's Storage tab.
