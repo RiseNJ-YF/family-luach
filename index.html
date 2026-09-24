@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Family Luach</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2323578C'/%3E%3Cpath d='M32 20v12M17 32h30M17 32v9M47 32v9' stroke='%23fff' stroke-width='4.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='15' r='7.5' fill='%23fff'/%3E%3Ccircle cx='17' cy='47' r='7.5' fill='%23F2C14E'/%3E%3Ccircle cx='47' cy='47' r='7.5' fill='%23F2C14E'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#23578C">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700&display=swap">
@@ -212,7 +215,7 @@ button:disabled{cursor:default;opacity:.6}
 .wrap.wide{max-width:none}
 .zoom-pct{cursor:default;min-width:56px;justify-content:center}
 .tree-wrap.panning{cursor:grabbing}
-.tree-wrap{cursor:grab;touch-action:pan-x pan-y;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 16px 36px;background-image:radial-gradient(color-mix(in srgb,var(--ink) 10%,transparent) 1px,transparent 1px);background-size:22px 22px}
+.tree-wrap{cursor:grab;touch-action:none;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 16px 36px;background-image:radial-gradient(color-mix(in srgb,var(--ink) 10%,transparent) 1px,transparent 1px);background-size:22px 22px}
 .ftree{position:relative;margin-inline:auto}
 .ftree .fl-h{position:absolute;height:0;border-top:1.5px solid var(--line-2)}
 .ftree .fl-v{position:absolute;width:0;border-left:1.5px solid var(--line-2)}
@@ -293,6 +296,14 @@ button:disabled{cursor:default;opacity:.6}
 .form{display:flex;flex-direction:column;gap:18px}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:460px){.fgrid{grid-template-columns:1fr}}
+@media (max-width:640px){
+  .btn,.btn.sm{min-height:40px;padding-block:8px}
+  .seg button{min-height:38px}
+  .chip{min-height:36px}
+  button.linkbtn{padding:10px 4px}
+  .inp,.sel,input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px}
+}
+.navgrp{display:inline-flex;gap:6px;align-items:center}
 .field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .field>label,.flab{font-size:13px;font-weight:600;color:var(--ink-2)}
 .inp{border:1px solid var(--line-2);background:var(--bg);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
@@ -370,6 +381,7 @@ textarea.inp{min-height:70px;resize:vertical}
 <script id="app-script">
 (function(){
 'use strict';
+var ICON_LINKS="<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2323578C'/%3E%3Cpath d='M32 20v12M17 32h30M17 32v9M47 32v9' stroke='%23fff' stroke-width='4.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='32' cy='15' r='7.5' fill='%23fff'/%3E%3Ccircle cx='17' cy='47' r='7.5' fill='%23F2C14E'/%3E%3Ccircle cx='47' cy='47' r='7.5' fill='%23F2C14E'/%3E%3C/svg%3E\">";
 var FONT_LINKS='<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&family=Frank+Ruhl+Libre:wght@400;500;700&display=swap">';
 var PAGE_TITLE='Family Luach';
 var LIB_H2C='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
@@ -700,14 +712,25 @@ function render(){
   if(ui.view==='tree') sizeTree();
 }
 /* The tree box fills the rest of the window; in "fit" mode the whole tree is scaled to fit inside it. */
-function sizeTree(){
+function sizeTree(all){
   var w=$('#tree-wrap'),inner=$('#tree-zoom'),ft=w&&w.querySelector('.ftree');
   if(!w||!inner||!ft) return;
   w.style.height=Math.max(320,window.innerHeight-w.getBoundingClientRect().top-44)+'px';
   if(ui.zoomFit){
     var tw=parseFloat(ft.style.width),th=parseFloat(ft.style.height);
     var z=Math.min((w.clientWidth-32)/tw,(w.clientHeight-64)/th,1.25);
-    setZoom(Math.max(0.12,z));w.scrollLeft=0;w.scrollTop=0;
+    /* On a phone the whole family would be too small to read: start at a readable size instead,
+       with the top of the tree centred. Pinch or drag to see the rest; "Fit" shows everything. */
+    var phone=!all&&w.clientWidth<600&&z<0.8;
+    setZoom(phone?0.8:Math.max(0.12,z));w.scrollLeft=0;w.scrollTop=0;
+    if(phone){
+      var rc=w.querySelector('.tcard.root');
+      if(rc){
+        var top=rc.getBoundingClientRect().top,L=Infinity,R=-Infinity,b=w.getBoundingClientRect();
+        $$('.tcard',w).forEach(function(c){var a=c.getBoundingClientRect();if(Math.abs(a.top-top)<2){L=Math.min(L,a.left);R=Math.max(R,a.right);}});
+        w.scrollLeft=(L+R)/2-b.left-w.clientWidth/2;
+      }
+    }
   }
 }
 function setZoom(z){
@@ -831,7 +854,7 @@ function calHeader(title,heTitle,sub){
   var h='<div class="cal-head"><div class="cal-title"><h2>'+esc(title)+(heTitle?' <span class="he" dir="rtl" lang="he" style="font-family:var(--display);color:var(--ink-2);font-size:.8em">'+esc(heTitle)+'</span>':'')+'</h2><div class="sub">'+sub+'</div></div>';
   h+='<div class="cal-nav"><div class="seg" role="group" aria-label="Span"><button data-act="calspan" data-s="month" aria-pressed="'+!yr+'">Month</button><button data-act="calspan" data-s="year" aria-pressed="'+yr+'">Year</button></div>';
   h+='<div class="seg" role="group" aria-label="Calendar"><button data-act="calmode" data-m="greg" aria-pressed="'+!heb+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+heb+'">Hebrew</button></div>';
-  h+='<button class="btn sm" data-act="cal-prev" aria-label="Previous">‹</button><button class="btn sm" data-act="cal-today">Today</button><button class="btn sm" data-act="cal-next" aria-label="Next">›</button></div></div>';
+  h+='<span class="navgrp"><button class="btn sm" data-act="cal-prev" aria-label="Previous">‹</button><button class="btn sm" data-act="cal-today">Today</button><button class="btn sm" data-act="cal-next" aria-label="Next">›</button></span></div></div>';
   h+='<div style="margin-bottom:14px">'+filtersHTML()+'</div>';
   return h;
 }
@@ -2005,7 +2028,7 @@ function restorePending(){
 function buildHtml(d){
   var S='script';
   var json=JSON.stringify(d).replace(/</g,'\\u003c');
-  return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<title>'+PAGE_TITLE+'</title>\n'+FONT_LINKS+'\n<style id="app-style">'+$('#app-style').textContent+'</style>\n</head>\n<body>\n<div id="app"></div>\n<div id="drawer-root"></div>\n<'+S+' type="application/json" id="family-data">'+json+'</'+S+'>\n<'+S+' type="text/plain" id="font-alef-regular">'+$('#font-alef-regular').textContent+'</'+S+'>\n<'+S+' type="text/plain" id="font-alef-bold">'+$('#font-alef-bold').textContent+'</'+S+'>\n<'+S+' id="app-script">'+$('#app-script').textContent+'</'+S+'>\n</body>\n</html>\n';
+  return '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<title>'+PAGE_TITLE+'</title>\n'+ICON_LINKS+'\n'+FONT_LINKS+'\n<style id="app-style">'+$('#app-style').textContent+'</style>\n</head>\n<body>\n<div id="app"></div>\n<div id="drawer-root"></div>\n<'+S+' type="application/json" id="family-data">'+json+'</'+S+'>\n<'+S+' type="text/plain" id="font-alef-regular">'+$('#font-alef-regular').textContent+'</'+S+'>\n<'+S+' type="text/plain" id="font-alef-bold">'+$('#font-alef-bold').textContent+'</'+S+'>\n<'+S+' id="app-script">'+$('#app-script').textContent+'</'+S+'>\n</body>\n</html>\n';
 }
 function save(){
   if(WEB){if(!saving) webSave();return;}
@@ -2080,7 +2103,7 @@ document.addEventListener('click',function(e){
     case 'tree-here':ui.treeRoot=pid;ui.zoomFit=true;ui.view='tree';lsSet('fl-view','tree');drawer=null;renderAll();window.scrollTo(0,0);break;
     case 'zoom':
       var z=+t.dataset.z,tw=$('#tree-wrap');
-      if(z===0){ui.zoomFit=true;sizeTree();}
+      if(z===0){ui.zoomFit=true;sizeTree(true);}
       else if(tw){var rr0=tw.getBoundingClientRect();zoomAt(rr0.left+tw.clientWidth/2,rr0.top+tw.clientHeight/2,z>0?1.25:0.8);}
       break;
     case 'drawer-close':
@@ -2167,15 +2190,48 @@ document.addEventListener('wheel',function(e){
   e.preventDefault();
   zoomAt(e.clientX,e.clientY,Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0015)));
 },{passive:false});
-var pan=null;
+/* Drag works from anywhere in the tree, cards included (a drag doesn't count as a tap on the card).
+   Two fingers pinch to zoom around the point between them. */
+var pan=null,pinch=null,touches={},dragged=false;
+function tw0(e){return e.target.closest&&e.target.closest('#tree-wrap');}
 document.addEventListener('pointerdown',function(e){
-  var w=e.target.closest&&e.target.closest('#tree-wrap');
-  if(!w||e.button!==0||e.target.closest('button')) return;
-  pan={w:w,x:e.clientX,y:e.clientY,l:w.scrollLeft,t:w.scrollTop,id:e.pointerId};w.classList.add('panning');
+  var w=tw0(e);if(!w||(e.pointerType==='mouse'&&e.button!==0)) return;
+  touches[e.pointerId]={x:e.clientX,y:e.clientY};dragged=false;
+  var ids=Object.keys(touches);
+  if(ids.length===2){
+    var p1=touches[ids[0]],p2=touches[ids[1]];
+    pinch={w:w,d:Math.hypot(p1.x-p2.x,p1.y-p2.y)||1};pan=null;
+  } else if(ids.length===1){pan={w:w,x:e.clientX,y:e.clientY,l:w.scrollLeft,t:w.scrollTop,id:e.pointerId};}
 });
-document.addEventListener('pointermove',function(e){if(!pan||e.pointerId!==pan.id) return;pan.w.scrollLeft=pan.l-(e.clientX-pan.x);pan.w.scrollTop=pan.t-(e.clientY-pan.y);});
-document.addEventListener('pointerup',function(){if(pan){pan.w.classList.remove('panning');pan=null;}});
-window.addEventListener('resize',function(){if(ui.view==='tree') sizeTree();});
+document.addEventListener('pointermove',function(e){
+  if(!touches[e.pointerId]) return;
+  touches[e.pointerId]={x:e.clientX,y:e.clientY};
+  if(pinch){
+    var ids=Object.keys(touches);if(ids.length<2) return;
+    var p1=touches[ids[0]],p2=touches[ids[1]],d=Math.hypot(p1.x-p2.x,p1.y-p2.y)||1;
+    zoomAt((p1.x+p2.x)/2,(p1.y+p2.y)/2,d/pinch.d);pinch.d=d;dragged=true;return;
+  }
+  if(!pan||e.pointerId!==pan.id) return;
+  var dx=e.clientX-pan.x,dy=e.clientY-pan.y;
+  if(!dragged&&Math.abs(dx)+Math.abs(dy)<6) return;
+  if(!dragged){dragged=true;ui.zoomFit=false;pan.w.classList.add('panning');}
+  pan.w.scrollLeft=pan.l-dx;pan.w.scrollTop=pan.t-dy;
+});
+function endTouch(e){
+  delete touches[e.pointerId];
+  if(pinch&&Object.keys(touches).length<2){pinch=null;var ids=Object.keys(touches),w=$('#tree-wrap');if(ids.length===1&&w){var p=touches[ids[0]];pan={w:w,x:p.x,y:p.y,l:w.scrollLeft,t:w.scrollTop,id:+ids[0]};}}
+  if(pan&&e.pointerId===pan.id){pan.w.classList.remove('panning');pan=null;}
+}
+document.addEventListener('pointerup',endTouch);
+document.addEventListener('pointercancel',endTouch);
+document.addEventListener('click',function(e){if(dragged&&tw0(e)){e.stopPropagation();e.preventDefault();dragged=false;}},true);
+/* Phones fire "resize" when the address bar slides in and out: only refit when the width really changes. */
+var lastW=window.innerWidth;
+window.addEventListener('resize',function(){
+  if(ui.view!=='tree') return;
+  if(window.innerWidth===lastW){var z=ui.zoomFit;ui.zoomFit=false;sizeTree();ui.zoomFit=z;return;}
+  lastW=window.innerWidth;sizeTree();
+});
 document.addEventListener('submit',function(e){e.preventDefault();if(e.target.id==='login') signIn();if(e.target.id==='setup') runSetup();});
 /* Root the tree at the oldest known ancestor, going through a spouse for in-laws with no parents listed. */
 function topAncestor(id){
