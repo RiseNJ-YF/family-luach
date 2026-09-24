@@ -1164,9 +1164,9 @@ function drawerView(p){
   h+='</div><button class="icon-btn" data-act="drawer-close" aria-label="Close">×</button></header><div class="dbody">';
   h+='<section class="dsec"><h4>Dates</h4><div class="facts">';
   if(p.birth){
-    h+='<div class="fact"><div class="fl">Born</div><div class="fv">'+dateBlock(p.birth,p.birthSunset,p.birthNoYear)+'</div></div>';
+    h+='<div class="fact"><div class="fl">Born</div><div class="fv">'+dateBlock(p.birth,p.birthSunset,p.birthNoYear)+(noAge(p)&&(p.deceased||ageAt(p,TODAY)==null)?'<span class="alt">Age hidden in PDFs</span>':'')+'</div></div>';
     if(!p.deceased){
-      var age=ageAt(p,TODAY);if(age!=null) h+='<div class="fact"><div class="fl">Age</div><div class="fv num">'+age+'</div></div>';
+      var age=ageAt(p,TODAY);if(age!=null) h+='<div class="fact"><div class="fl">Age</div><div class="fv"><span class="num">'+age+'</span>'+(noAge(p)?'<span class="alt">Hidden in PDFs</span>':'')+'</div></div>';
       var ng=nextGreg(p.birth);h+='<div class="fact"><div class="fl">Next birthday</div><div class="fv">'+nextBlock(ng)+(age!=null?'<span class="alt">Turns '+ageAt(p,ng)+'</span>':'')+'</div></div>';
       if(!p.birthNoYear){var hb=hebOf(p.birth,p.birthSunset),nh=nextHeb(hb,hebAnniv);h+='<div class="fact"><div class="fl">Hebrew birthday</div><div class="fv">'+nextBlock(nh)+'<span class="alt">'+esc(fmtH(hb,false))+' · '+heSpan(hb,false)+'</span></div></div>';}
     }
