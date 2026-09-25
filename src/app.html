@@ -1207,9 +1207,9 @@ function layoutPack(id,seen,depth){
     var cs=subs.map(function(x){return x.ox+x.cx;});
     g.target=(Math.min.apply(null,cs)+Math.max.apply(null,cs))/2;
     if(rows.length>1){
-      /* The line to the next row runs down just past the end of the rows (the right; the left in Hebrew). */
-      var hi=-Infinity;g.ct.forEach(function(c){if(c&&c[1]>hi) hi=c[1];});
-      g.trunk=hi+16;var last=rows[rows.length-1];
+      /* The line that feeds the later rows runs down the start side (the left; the right in Hebrew). */
+      var lo=Infinity;g.ct.forEach(function(c){if(c&&c[0]<lo) lo=c[0];});
+      g.trunk=lo-16;var last=rows[rows.length-1];
       for(var l=0;l<2*last.oy/TP;l++) ctAdd(g.ct,l,g.trunk-2,g.trunk+2);
     }
   });
@@ -1254,30 +1254,28 @@ function layoutPack(id,seen,depth){
     var y0=g.single!=null?TH:g.ly+(marriageOrd(g.m)?20:12);
     var busY=open.length===1?TH+VG/2:TH+16+Math.min(g.lvl,4)*13;
     if(g.rows.length>1){
-      /* Wrapped family: the line runs along the first row, carries on past its end, turns down and comes
-         back under that row to start the next one, reading on in the same direction. Every turn is rounded. */
-      var RR=10,tx=g.L+g.trunk+sh,rowY=g.rows.map(function(r,ri){return ri===0?busY:childY+r.oy-62;});
-      var lastBus=rowY[rowY.length-1],c0=g.L+g.rows[0][0].ox+g.rows[0][0].cx+sh,from=Math.min(ax,c0);
-      if(ax<c0-1){
-        var rp=Math.max(0,Math.min(RR,(busY-y0)/2,(c0-ax)/2));
-        items.push({t:'el',c:'bl',x:ax,y:y0,w:rp,h:busY+LW-y0,r:rp});
-        items.push({t:'h',x:ax+rp,y:busY,w:c0-ax-rp});
-      } else items.push({t:'v',x:ax,y:y0,h:busY+LW-y0});
-      /* start the long run just after the first child's rounded corner, so that corner stays round */
-      var f0=ax<c0-1?from:c0+Math.min(RR,(childY-busY)/2);
-      items.push({t:'el',c:'tr',x:f0,y:busY,w:tx+LW-f0,h:lastBus-RR-busY+LW,r:RR});
+      /* Wrapped family: the first row hangs from the parents as usual; a line down the start side feeds the
+         other rows, each hanging from its own line. Every turn is rounded. */
+      var RR=10,tx=g.L+g.trunk+sh,rowY=g.rows.map(function(r,ri){return ri===0?busY:childY+r.oy-VG/2;});
+      var lastBus=rowY[rowY.length-1],r0=g.rows[0].map(function(x){return g.L+x.ox+x.cx+sh;}),rl0=r0[r0.length-1];
+      var rc0=Math.min(RR,(childY-busY)/2),rp=Math.max(0,Math.min(RR,(busY-y0)/2)),end0;
+      if(ax>rl0+1){items.push({t:'el',c:'br',x:ax-rp,y:y0,w:rp+LW,h:busY+LW-y0,r:rp});end0=ax-rp;}
+      else{items.push({t:'v',x:ax,y:y0,h:busY+LW-y0});end0=rl0-(rl0>ax+1?rc0:0);}
+      /* the first row's line, turning down into the line down the side */
+      items.push({t:'el',c:'tl',x:tx,y:busY,w:end0-tx+LW,h:lastBus-RR-busY+LW,r:RR});
       g.rows.forEach(function(r,ri){
-        var top=childY+r.oy,cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
-        if(ri===0){cx.forEach(function(c){var rc=Math.min(RR,(top-busY)/2);items.push({t:'el',c:'tl',x:c,y:busY,w:rc+LW,h:top-busY,r:rc});});return;}
-        /* The next row: the line comes back under the row above, turns round just before this row's first
-           child and runs forward again, so the children leave it in age order. */
-        var yU=rowY[ri],yL=top-36,hh=(yL-yU)/2,ru=Math.min(RR,hh),xs=cx[0]-22;
-        items.push({t:'el',c:'br',x:xs+ru,y:yU-RR,w:tx+LW-xs-ru,h:RR+LW,r:RR});
-        items.push({t:'el',c:'tl',x:xs,y:yU,w:ru+LW,h:hh+LW,r:ru});
-        items.push({t:'el',c:'bl',x:xs,y:yU+hh,w:ru+LW,h:hh+LW,r:ru});
-        cx.forEach(function(c){var rc=Math.min(RR,(top-yL)/2);items.push({t:'el',c:'tr',x:xs+ru,y:yL,w:c+LW-xs-ru,h:top-yL,r:rc});});
+        var by=rowY[ri],top=childY+r.oy,rc=Math.min(RR,(top-by)/2),cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
+        if(ri>0){
+          items.push({t:'el',c:'bl',x:tx,y:by-RR,w:RR+LW,h:RR+LW,r:RR});
+          items.push({t:'h',x:tx+RR,y:by,w:cx[cx.length-1]-rc-tx-RR});
+        }
+        cx.forEach(function(c){
+          if(ri===0&&c<ax-1) items.push({t:'el',c:'tl',x:c,y:by,w:rc+LW,h:top-by,r:rc});
+          else if(ri>0||c>ax+1) items.push({t:'el',c:'tr',x:c-rc,y:by,w:rc+LW,h:top-by,r:rc});
+          else items.push({t:'v',x:c,y:by,h:top-by});
+        });
       });
-      ctAdd(ct,1,from,tx+2);
+      ctAdd(ct,1,tx-2,Math.max(ax,rl0));
     } else {
       var cxs=g.subs.map(function(x){return g.L+x.ox+x.cx+sh;});
       var left=cxs.filter(function(c){return c<ax-1;}),right=cxs.filter(function(c){return c>ax+1;}),mid=cxs.length-left.length-right.length;
