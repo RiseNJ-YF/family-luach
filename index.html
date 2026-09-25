@@ -697,7 +697,7 @@ function hmark(e){return e.cal==='heb'&&e.kind!=='holiday'?'<span class="hmark" 
 var hash=(location.hash||'').replace('#','');
 var ui={
   view:['upcoming','calendar','tree','people'].indexOf(hash)>=0?hash:(lsGet('fl-view','upcoming')),
-  calMode:lsGet('fl-calmode','greg'),calSpan:lsGet('fl-calspan','month'),
+  calMode:lsGet('fl-cal','heb')==='greg'?'greg':'heb',calSpan:lsGet('fl-calspan','month'),
   gCur:(function(){var g=gFromAbs(TODAY);return {y:g.y,m:g.m};})(),
   hCur:(function(){var h=H.fromAbs(TODAY);return {y:h.y,m:h.m};})(),
   sel:TODAY,treeRoot:null,treeLayout:lsGet('fl-tlayout','compact'),treeOpen:{},zoom:1,zoomFit:true,orient:lsGet('fl-orient','landscape'),q:'',sort:lsGet('fl-sort','name'),horizon:90,preview:false,panel:null,clearAsk:false
@@ -743,7 +743,7 @@ function render(){
 function outlineLinks(){
   var ot=$('.otree');if(!ot) return;
   var z=parseFloat(($('#tree-zoom')||{style:{}}).style.zoom)||1,ob=ot.getBoundingClientRect(),heb=ot.classList.contains('rtl'),paths='',n=0,R=10;
-  var loc=function(e){var b=e.getBoundingClientRect();return {l:(b.left-ob.left)/z,r:(b.right-ob.left)/z,m:((b.top+b.bottom)/2-ob.top)/z};};
+  var loc=function(e){var b=e.getBoundingClientRect();return {l:(b.left-ob.left)/z,r:(b.right-ob.left)/z,m:(b.top-ob.top)/z+LINKY};};
   $$('.tcard.ghost',ot).forEach(function(g){
     var real=$$('.tcard',ot).filter(function(c){return c.dataset.pid===g.dataset.pid&&!c.classList.contains('ghost');})[0];
     if(!real) return;
@@ -1073,17 +1073,26 @@ function wivesToMove(ghostIds,TP){
   });
   return any?f:null;
 }
+/* A path through a list of points with rounded corners. */
+function roundPath(pts,R){
+  pts=pts.filter(function(p,i){return !i||Math.abs(p[0]-pts[i-1][0])+Math.abs(p[1]-pts[i-1][1])>0.5;});
+  var d='M'+pts[0][0]+' '+pts[0][1];
+  for(var i=1;i<pts.length-1;i++){
+    var a=pts[i-1],p=pts[i],b=pts[i+1],l1=Math.hypot(p[0]-a[0],p[1]-a[1]),l2=Math.hypot(b[0]-p[0],b[1]-p[1]),r=Math.min(R,l1/2,l2/2);
+    var ux=(p[0]-a[0])/l1,uy=(p[1]-a[1])/l1,vx=(b[0]-p[0])/l2,vy=(b[1]-p[1])/l2;
+    d+='L'+(p[0]-ux*r)+' '+(p[1]-uy*r)+'Q'+p[0]+' '+p[1]+' '+(p[0]+vx*r)+' '+(p[1]+vy*r);
+  }
+  var z=pts[pts.length-1];return d+'L'+z[0]+' '+z[1];
+}
+/* The link leaves the copy from its side, near the top (above where any marriage line comes out),
+   runs in the gap beside it, crosses in the gap just above the real card's row, and comes down into
+   the real card's side near its top. So it never meets the line from the parents or a marriage line. */
+var LINKY=22;
 function linkPath(g,r){
-  /* From the copy into the gap beside its row (above it when the real card is higher up, below it
-     otherwise), across, then up or down into the real card. Rounded corners. */
-  var R=10,gx=g.x+TW/2,gt=g.y+TPAD,gb=gt+TH,rx=r.x+TW/2,rt=r.y+TPAD,rb=rt+TH,y0,yh,ey;
-  if(rb<=gt){y0=gt;yh=gt-14;ey=rb;}
-  else if(rt>=gb){y0=gb;yh=gb+10;ey=rt;}
-  else{y0=gb;yh=gb+10;ey=rb;}
-  var sx=rx>=gx?1:-1,s1=yh>y0?1:-1,s2=ey>yh?1:-1;
-  var r1=Math.min(R,Math.abs(rx-gx)/2,Math.abs(yh-y0)),r2=Math.min(R,Math.abs(rx-gx)/2,Math.abs(ey-yh));
-  var d='M'+gx+' '+y0+'L'+gx+' '+(yh-s1*r1)+'Q'+gx+' '+yh+' '+(gx+sx*r1)+' '+yh+'L'+(rx-sx*r2)+' '+yh+'Q'+rx+' '+yh+' '+rx+' '+(yh+s2*r2)+'L'+rx+' '+ey;
-  return '<path d="'+d+'"/>';
+  var gt=g.y+TPAD,rt=r.y+TPAD,left=(r.x+TW/2)<(g.x+TW/2);
+  var xa=left?g.x:g.x+TW,xv=left?g.x-11:g.x+TW+11,ya=gt+LINKY;
+  var xb=left?r.x+TW:r.x,xr=left?r.x+TW+11:r.x-11,yb=rt+LINKY,yh=rt-10;
+  return '<path d="'+roundPath([[xa,ya],[xv,ya],[xv,yh],[xr,yh],[xr,yb],[xb,yb]],9)+'"/>';
 }
 function linkSVG(paths,w,h){return paths?'<svg class="flink" width="'+Math.ceil(w)+'" height="'+Math.ceil(h)+'" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none" fill="none" stroke="#8C7AB5" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round">'+paths+'</svg>':'';}
 /* Where a family's children hang from, left to right: a marriage's label sits in the gap just before
@@ -2498,7 +2507,7 @@ document.addEventListener('click',function(e){
       break;
     case 'orient':ui.orient=t.dataset.o;lsSet('fl-orient',ui.orient);render();break;
     case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;render();break;
-    case 'calmode':ui.calMode=t.dataset.m;lsSet('fl-calmode',ui.calMode);gotoMonthOf(ui.sel);if(ui.view==='tree') ui.zoomFit=true;render();break;
+    case 'calmode':ui.calMode=t.dataset.m;lsSet('fl-cal',ui.calMode);gotoMonthOf(ui.sel);if(ui.view==='tree') ui.zoomFit=true;render();break;
     case 'calspan':ui.calSpan=t.dataset.s;lsSet('fl-calspan',ui.calSpan);gotoMonthOf(ui.sel);render();break;
     case 'cal-prev':case 'cal-next':
       var fwd=act==='cal-next';
