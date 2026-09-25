@@ -212,13 +212,8 @@ button:disabled{cursor:default;opacity:.6}
 .tree-bar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:space-between;margin-bottom:14px}
 .tree-bar label{font-size:13px;color:var(--ink-2);font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .sel{border:1px solid var(--line-2);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:14px;max-width:100%}
-/* Big screens: every tab uses the full width, and the page grows in proportion (--ui-scale is set from
-   the window width: 1 up to 1500px wide, then larger, up to 1.75). The family tree keeps its own fit and
-   zoom, so on that tab only the header and controls grow. */
-.wrap.wide{padding-inline:calc(clamp(20px,2.5vw,56px) * var(--ui-scale,1))}
-@media (max-width:560px){.wrap.wide{padding-inline:16px}}
+/* Every tab uses the full width of the window; text keeps its normal size (browser zoom makes it bigger). */
 .tree-bar label{max-width:100%;min-width:0}.tree-bar .sel{max-width:100%;min-width:0;text-overflow:ellipsis}
-.wrap:not(.wide),.wrap.wide>:not(main),.wrap.wide .tree-bar,.wrap.wide main>.note,.drawer,.savebar,.toast{zoom:var(--ui-scale,1)}
 .zoom-pct{cursor:default;min-width:56px;justify-content:center}
 .tree-wrap.panning{cursor:grabbing}
 .tree-wrap{cursor:grab;touch-action:none;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 16px 36px;background-image:radial-gradient(color-mix(in srgb,var(--ink) 10%,transparent) 1px,transparent 1px);background-size:22px 22px}
@@ -738,10 +733,6 @@ function render(){
   if(ui.view==='tree') sizeTree();
 }
 /* The tree box fills the rest of the window; in "fit" mode the whole tree is scaled to fit inside it. */
-function uiScale(){
-  try{document.documentElement.style.setProperty('--ui-scale',Math.max(1,Math.min(1.75,window.innerWidth/1500)).toFixed(3));}catch(e){}
-}
-uiScale();window.addEventListener('resize',uiScale);
 function sizeTree(all){
   var w=$('#tree-wrap'),inner=$('#tree-zoom'),ft=w&&w.querySelector('.ftree');
   if(!w||!inner||!ft) return;
