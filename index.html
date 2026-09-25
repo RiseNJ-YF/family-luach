@@ -605,7 +605,7 @@ function hebNameParts(o){
 }
 function hebNameFrom(o){var q=hebNameParts(o);return [q.first,q.rel,q.last,q.maiden?'('+q.maiden+')':''].filter(Boolean).join(' ');}
 function hebParts(p){var pr=parentsOf(p);return hebNameParts({hebFirst:p.hebFirst,hebLast:p.hebLast,hebMaiden:p.hebMaiden,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
-function hebPartsHTML(p){var q=hebParts(p);return [q.first?'<b class="nm">'+esc(q.first)+'</b>':'',q.rel?'<span class="np">'+esc(q.rel)+'</span>':'',q.last?'<b class="nm">'+esc(q.last)+'</b>':'',q.maiden?'<span class="np">(</span><b class="nm">'+esc(q.maiden)+'</b><span class="np">)</span>':''].filter(Boolean).join(' ');}
+function hebPartsHTML(p){var q=hebParts(p);return [q.first?'<b class="nm">'+esc(q.first)+'</b>':'',q.rel?'<span class="np">'+esc(q.rel)+'</span>':'',q.last?'<b class="nm">'+esc(q.last)+'</b>':'',q.maiden?'<span class="np">('+esc(q.maiden)+')</span>':''].filter(Boolean).join(' ');}
 function hebName(p){if(!p) return '';var pr=parentsOf(p);return hebNameFrom({hebFirst:p.hebFirst,hebLast:p.hebLast,hebMaiden:p.hebMaiden,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
 function hebNameZl(p){var n=hebName(p);return n&&p.deceased?n+' ז״ל':n;}
 function childWord(p){return p.gender==='m'?'Son':p.gender==='f'?'Daughter':'Child';}
@@ -2165,7 +2165,7 @@ function nameSegs(p,zl){
   if(q.first) out.push({t:q.first,b:true});
   if(q.rel) out.push({t:(out.length?' ':'')+q.rel});
   if(q.last) out.push({t:(out.length?' ':'')+q.last,b:true});
-  if(q.maiden) out.push({t:' ('+q.maiden+')',b:true});
+  if(q.maiden) out.push({t:' ('+q.maiden+')'});
   return out.concat(z);
 }
 function nameText(p,zl){
