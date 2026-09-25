@@ -1263,7 +1263,7 @@ function layoutPack(id,seen,depth){
     if(g.rows.length>1){
       /* Wrapped family: the line runs along the first row, carries on past its end, turns down and comes
          back under that row to start the next one, reading on in the same direction. Every turn is rounded. */
-      var RR=10,tx=g.L+g.trunk+sh,rowY=g.rows.map(function(r,ri){return ri===0?busY:childY+r.oy-VG/2;});
+      var RR=10,tx=g.L+g.trunk+sh,rowY=g.rows.map(function(r,ri){return ri===0?busY:childY+r.oy-62;});
       var lastBus=rowY[rowY.length-1],c0=g.L+g.rows[0][0].ox+g.rows[0][0].cx+sh,from=Math.min(ax,c0);
       if(ax<c0-1){
         var rp=Math.max(0,Math.min(RR,(busY-y0)/2,(c0-ax)/2));
@@ -1274,9 +1274,15 @@ function layoutPack(id,seen,depth){
       var f0=ax<c0-1?from:c0+Math.min(RR,(childY-busY)/2);
       items.push({t:'el',c:'tr',x:f0,y:busY,w:tx+LW-f0,h:lastBus-RR-busY+LW,r:RR});
       g.rows.forEach(function(r,ri){
-        var by=rowY[ri],top=childY+r.oy,cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
-        if(ri>0){var fr=cx[0]+Math.min(RR,(top-by)/2);items.push({t:'el',c:'br',x:fr,y:by-RR,w:tx+LW-fr,h:RR+LW,r:RR});}
-        cx.forEach(function(c){var rc=Math.min(RR,(top-by)/2);items.push({t:'el',c:'tl',x:c,y:by,w:rc+LW,h:top-by,r:rc});});
+        var top=childY+r.oy,cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
+        if(ri===0){cx.forEach(function(c){var rc=Math.min(RR,(top-busY)/2);items.push({t:'el',c:'tl',x:c,y:busY,w:rc+LW,h:top-busY,r:rc});});return;}
+        /* The next row: the line comes back under the row above, turns round just before this row's first
+           child and runs forward again, so the children leave it in age order. */
+        var yU=rowY[ri],yL=top-36,hh=(yL-yU)/2,ru=Math.min(RR,hh),xs=cx[0]-22;
+        items.push({t:'el',c:'br',x:xs+ru,y:yU-RR,w:tx+LW-xs-ru,h:RR+LW,r:RR});
+        items.push({t:'el',c:'tl',x:xs,y:yU,w:ru+LW,h:hh+LW,r:ru});
+        items.push({t:'el',c:'bl',x:xs,y:yU+hh,w:ru+LW,h:hh+LW,r:ru});
+        cx.forEach(function(c){var rc=Math.min(RR,(top-yL)/2);items.push({t:'el',c:'tr',x:xs+ru,y:yL,w:c+LW-xs-ru,h:top-yL,r:rc});});
       });
       ctAdd(ct,1,from,tx+2);
     } else {
