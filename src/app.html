@@ -238,7 +238,8 @@ button:disabled{cursor:default;opacity:.6}
 .otree.rtl .orow{flex-direction:row-reverse}
 .otree .og{position:absolute;width:0;border-left:1.5px solid var(--line-2)}
 .otree .oh{position:absolute;top:50%;height:0;border-top:1.5px solid var(--line-2)}
-.otree .oring{align-self:center;color:var(--c-anniversary);padding:0 7px;font-size:15px}
+.otree .oring{align-self:center;color:var(--c-anniversary);width:30px;flex:none;text-align:center;font-size:15px}
+.otree .ob{position:absolute;bottom:0;height:0;border-top:1.5px solid var(--line-2)}
 .otree .olabel{align-self:center;font-size:13px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px dashed var(--line-2);border-radius:999px;padding:3px 11px;white-space:nowrap}
 .otree .tcard{width:214px;height:auto;min-height:78px;padding:6px 10px}
 .tcell{position:relative;display:flex;flex-direction:column;align-items:center}
@@ -1308,8 +1309,11 @@ function outlineRows(root){
     groups.forEach(function(g){g.kids.sort(byBirth);});
     groups.sort(function(a,b){return byBirth(a.kids[0],b.kids[0]);});
     if(depth>=28) groups=[];
-    var sp=spousesOf(id).map(function(x){return x.pid;}).filter(function(x){return pos[x]!=null;});
-    rows.push({t:'fam',ids:[id].concat(sp,chain.filter(function(x){return x!==id&&sp.indexOf(x)<0;})),depth:depth,guides:guides,last:last,kids:groups.length>0});
+    /* Same order as the tree row: the family member, then each spouse in marriage order, a spouse's own other marriages right after them. */
+    var ids=chain,ip={};ids.forEach(function(x,i){ip[x]=i;});
+    /* Where each family's line starts: the ⚭ just before that husband or wife, or a lone parent's card. */
+    var srcs=groups.map(function(g){return g.single!=null?{card:ip[g.single]}:{ring:Math.max(ip[g.m.a],ip[g.m.b])-1};});
+    rows.push({t:'fam',ids:ids,srcs:srcs,depth:depth,guides:guides,last:last,kids:groups.length>0});
     var g2=depth>0?guides.concat([!last]):guides,multi=groups.length>1;
     groups.forEach(function(g,gi){
       var gl=gi===groups.length-1;g.kids.sort(byBirth);
@@ -1328,7 +1332,14 @@ function outlineRowHTML(r,root,placed,pdf){
   var S=ui.calMode==='heb'?'right':'left',IND=30,x0=r.depth*IND,h='<div class="orow" style="padding-'+S+':'+x0+'px">';
   r.guides.forEach(function(on,j){if(on) h+='<i class="og" style="'+S+':'+(j*IND+12)+'px;top:0;bottom:0"></i>';});
   if(r.depth>0){var ex=(r.depth-1)*IND+12;h+='<i class="og" style="'+S+':'+ex+'px;top:0;'+(r.last?'height:50%':'bottom:0')+'"></i><i class="oh" style="'+S+':'+ex+'px;width:'+(x0-ex)+'px"></i>';}
-  if(r.kids) h+='<i class="og" style="'+S+':'+(x0+12)+'px;bottom:0;height:6px"></i>';
+  /* A family's line starts at its ⚭ (or a lone parent's card), runs along under the cards, and joins
+     the children's line. Outline cards are 214px wide with a 30px ⚭ between them. */
+  if(r.t==='label'&&r.kids) h+='<i class="og" style="'+S+':'+(x0+12)+'px;bottom:0;height:6px"></i>';
+  (r.srcs||[]).forEach(function(src){
+    var x=src.ring!=null?x0+(src.ring+1)*214+src.ring*30+15:x0+src.card*244+12;
+    h+='<i class="og" style="'+S+':'+x+'px;'+(src.ring!=null?'top:calc(50% + 11px);bottom:0':'bottom:0;height:6px')+'"></i>';
+    if(x>x0+12) h+='<i class="ob" style="'+S+':'+(x0+12)+'px;width:'+(x-x0-12+1.5)+'px"></i>';
+  });
   if(r.t==='label') h+='<span class="olabel">'+esc(r.text)+'</span>';
   else h+=r.ids.map(function(id){return tcard(P(id),id===root,placed,pdf);}).join('<span class="oring">⚭</span>');
   return h+'</div>';
