@@ -512,6 +512,10 @@ var TODAY=absFromG(NOW.getFullYear(),NOW.getMonth()+1,NOW.getDate());
 function rel(a){var n=a-TODAY;if(n===0) return 'Today';if(n===1) return 'Tomorrow';if(n===-1) return 'Yesterday';return n>0?'in '+n+' days':Math.abs(n)+' days ago';}
 
 /* ---------- Data ---------- */
+/* English names start with a capital letter: each word's first letter (also after - or '), the rest as typed;
+   name particles like van, de or ben keep their small letter unless they come first. */
+var NAME_PARTICLES={van:1,von:1,der:1,den:1,de:1,da:1,di:1,du:1,la:1,le:1,bin:1,ben:1,bat:1,al:1};
+function capWords(v){return String(v||'').replace(/(^|[\s\-'’])([a-z])([a-z]*)/g,function(m,a,b,rest,off){return off>0&&/\s/.test(a)&&NAME_PARTICLES[b+rest]?m:a+b.toUpperCase()+rest;});}
 function normPerson(p){
   p=p||{};
   var gender=p.gender==='m'||p.gender==='f'?p.gender:'';
@@ -521,8 +525,8 @@ function normPerson(p){
     if(mm){hebFirst=mm[1];fatherHeb=fatherHeb||mm[3];if(!gender) gender=mm[2]==='בן'?'m':'f';}
     else hebFirst=String(p.hebrew).trim();
   }
-  return {id:String(p.id||uid('p')),first:String(p.first||''),last:String(p.last||''),gender:gender,
-    hebFirst:String(hebFirst||''),hebLast:String(hebLast||''),fatherHeb:String(fatherHeb||''),motherHeb:String(motherHeb||''),
+  return {id:String(p.id||uid('p')),first:capWords(p.first),last:capWords(p.last),gender:gender,maiden:capWords(p.maiden),
+    hebFirst:String(hebFirst||''),hebLast:String(hebLast||''),hebMaiden:String(p.hebMaiden||''),fatherHeb:String(fatherHeb||''),motherHeb:String(motherHeb||''),
     birth:parseISO(p.birth)?p.birth:'',birthSunset:!!p.birthSunset,birthNoYear:!!p.birthNoYear,hideAge:!!p.hideAge,
     deceased:!!p.deceased,death:parseISO(p.death)?p.death:'',deathSunset:!!p.deathSunset,
     parents:Array.isArray(p.parents)?p.parents.filter(Boolean).map(String).slice(0,2):[],
@@ -533,7 +537,7 @@ function normalize(d){
   d=d||{};var m=d.meta||{};
   return {meta:{familyName:String(m.familyName||'Our Family'),example:!!m.example},
     people:Array.isArray(d.people)?d.people.map(normPerson):[],
-    marriages:Array.isArray(d.marriages)?d.marriages.filter(function(x){return x&&x.a&&(x.b||x.date||x.nameHe||x.nameEn);}).map(function(x){return {id:String(x.id||uid('m')),a:String(x.a),b:String(x.b||''),date:parseISO(x.date)?x.date:'',sunset:!!x.sunset,divorced:!!x.divorced,nameHe:String(x.nameHe||''),nameEn:String(x.nameEn||'')};}):[]};
+    marriages:Array.isArray(d.marriages)?d.marriages.filter(function(x){return x&&x.a&&(x.b||x.date||x.nameHe||x.nameEn);}).map(function(x){return {id:String(x.id||uid('m')),a:String(x.a),b:String(x.b||''),date:parseISO(x.date)?x.date:'',sunset:!!x.sunset,divorced:!!x.divorced,nameHe:String(x.nameHe||''),nameEn:capWords(x.nameEn)};}):[]};
 }
 function readData(){try{return normalize(JSON.parse($('#family-data').textContent));}catch(e){return normalize({});}}
 var saved=readData();
@@ -555,7 +559,8 @@ function reindex(){
 }
 function byBirth(a,b){var pa=idx?idx.byId[a]:null,pb=idx?idx.byId[b]:null;var x=pa&&pa.birth||'9999',y=pb&&pb.birth||'9999';return x<y?-1:x>y?1:0;}
 function P(id){return idx.byId[id];}
-function fullName(p){return p?([p.first,p.last].filter(Boolean).join(' ')||'Unnamed'):'Unknown';}
+/* English name, with the maiden name in parentheses: "Rivka Cohen (Levin)" */
+function fullName(p){return p?(([p.first,p.last].filter(Boolean).join(' ')||'Unnamed')+(p.maiden?' ('+p.maiden+')':'')):'Unknown';}
 function firstName(p){return p?(p.first||fullName(p)):'Unknown';}
 /* Primary display name: the full Hebrew name when there is one, otherwise the English name. */
 function primaryText(p){return p?(hebName(p)||fullName(p)):'Unknown';}
@@ -587,12 +592,14 @@ function hebNameParts(o){
   var par=o.deceased?o.father:o.mother,pn=par&&par.hebFirst?par.hebFirst.trim():'';
   if(!pn) pn=((o.deceased?o.fatherHeb:o.motherHeb)||'').trim();
   if(first&&pn&&o.gender) rel=(o.gender==='m'?'בן ':'בת ')+pn;
-  return {first:first,rel:rel,last:last};
+  /* maiden name, in parentheses: "… כהן (לוין)" */
+  var maiden=first&&(o.hebMaiden||'').trim()?(o.hebMaiden||'').trim():'';
+  return {first:first,rel:rel,last:last,maiden:maiden};
 }
-function hebNameFrom(o){var q=hebNameParts(o);return [q.first,q.rel,q.last].filter(Boolean).join(' ');}
-function hebParts(p){var pr=parentsOf(p);return hebNameParts({hebFirst:p.hebFirst,hebLast:p.hebLast,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
-function hebPartsHTML(p){var q=hebParts(p);return [q.first?'<b class="nm">'+esc(q.first)+'</b>':'',q.rel?'<span class="np">'+esc(q.rel)+'</span>':'',q.last?'<b class="nm">'+esc(q.last)+'</b>':''].filter(Boolean).join(' ');}
-function hebName(p){if(!p) return '';var pr=parentsOf(p);return hebNameFrom({hebFirst:p.hebFirst,hebLast:p.hebLast,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
+function hebNameFrom(o){var q=hebNameParts(o);return [q.first,q.rel,q.last,q.maiden?'('+q.maiden+')':''].filter(Boolean).join(' ');}
+function hebParts(p){var pr=parentsOf(p);return hebNameParts({hebFirst:p.hebFirst,hebLast:p.hebLast,hebMaiden:p.hebMaiden,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
+function hebPartsHTML(p){var q=hebParts(p);return [q.first?'<b class="nm">'+esc(q.first)+'</b>':'',q.rel?'<span class="np">'+esc(q.rel)+'</span>':'',q.last?'<b class="nm">'+esc(q.last)+'</b>':'',q.maiden?'<span class="np">(</span><b class="nm">'+esc(q.maiden)+'</b><span class="np">)</span>':''].filter(Boolean).join(' ');}
+function hebName(p){if(!p) return '';var pr=parentsOf(p);return hebNameFrom({hebFirst:p.hebFirst,hebLast:p.hebLast,hebMaiden:p.hebMaiden,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
 function hebNameZl(p){var n=hebName(p);return n&&p.deceased?n+' ז״ל':n;}
 function childWord(p){return p.gender==='m'?'Son':p.gender==='f'?'Daughter':'Child';}
 function genCounts(id){
@@ -1020,7 +1027,7 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
     h+='<span class="tl">'+esc(fullName(p))+'</span>';
   } else {
     h+='<span class="tn">'+esc(p.first||'Unnamed')+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
-    if(p.last) h+='<span class="tl">'+esc(p.last)+'</span>';
+    if(p.last||p.maiden) h+='<span class="tl">'+esc([p.last,p.maiden?'('+p.maiden+')':''].filter(Boolean).join(' '))+'</span>';
   }
   if(dates) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
   if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
@@ -1703,7 +1710,7 @@ function drawerView(p){
 function ageNote(p){if(p.deceased) return '';var a=ageAt(p,TODAY);return a!=null?String(a):'';}
 
 /* ---------- Drawer: edit form ---------- */
-function newDraft(){return {id:null,first:'',last:'',gender:'',hebFirst:'',hebLast:'',fatherHeb:'',motherHeb:'',birth:'',birthSunset:false,birthNoYear:false,hideAge:false,deceased:false,death:'',deathSunset:false,father:'',mother:'',marriages:[],others:[],phone:'',email:'',notes:''};}
+function newDraft(){return {id:null,first:'',last:'',gender:'',hebFirst:'',hebLast:'',fatherHeb:'',motherHeb:'',birth:'',birthSunset:false,birthNoYear:false,hideAge:false,maiden:'',hebMaiden:'',deceased:false,death:'',deathSunset:false,father:'',mother:'',marriages:[],others:[],phone:'',email:'',notes:''};}
 function draftFrom(p){
   var d=JSON.parse(JSON.stringify(p)),pr=parentsOf(p);
   d.father=pr.father?pr.father.id:'';d.mother=pr.mother?pr.mother.id:'';
@@ -1737,7 +1744,7 @@ function hhelpHTML(key){
   return s;
 }
 function hebPreviewHTML(d){
-  var n=hebNameFrom({hebFirst:d.hebFirst,hebLast:d.hebLast,gender:d.gender,deceased:d.deceased,father:P(d.father),mother:P(d.mother),fatherHeb:d.fatherHeb,motherHeb:d.motherHeb});
+  var n=hebNameFrom({hebFirst:d.hebFirst,hebLast:d.hebLast,hebMaiden:d.gender==='m'?'':d.hebMaiden,gender:d.gender,deceased:d.deceased,father:P(d.father),mother:P(d.mother),fatherHeb:d.fatherHeb,motherHeb:d.motherHeb});
   var why;
   if(!d.hebFirst.trim()) why='Type a Hebrew first name to build the full name.';
   else if(!d.gender) why='Choose male or female to add בן or בת.';
@@ -1757,6 +1764,7 @@ function drawerEdit(){
   h+='<div class="field"><span class="flab">Gender</span><div class="gender" role="radiogroup" aria-label="Gender"><label><input type="radio" name="f-gender" id="f-gender-m" value="m"'+(d.gender==='m'?' checked':'')+'>Male</label><label><input type="radio" name="f-gender" id="f-gender-f" value="f"'+(d.gender==='f'?' checked':'')+'>Female</label></div></div>';
   h+='<div class="fgrid"><div class="field"><label for="f-first">First name</label><input class="inp" id="f-first" data-f="first" value="'+esc(d.first)+'" autocomplete="off"></div><div class="field"><label for="f-last">Last name</label><input class="inp" id="f-last" data-f="last" value="'+esc(d.last)+'" autocomplete="off"></div></div>';
   h+='<div class="fgrid"><div class="field"><label for="f-hebFirst">Hebrew first name</label><input class="inp he" dir="rtl" lang="he" id="f-hebFirst" data-f="hebFirst" data-hn="1" value="'+esc(d.hebFirst)+'" placeholder="דוד" autocomplete="off"></div><div class="field"><label for="f-hebLast">Hebrew last name</label><input class="inp he" dir="rtl" lang="he" id="f-hebLast" data-f="hebLast" data-hn="1" value="'+esc(d.hebLast)+'" placeholder="כהן" autocomplete="off"></div></div>';
+  if(d.gender!=='m') h+='<div class="fgrid"><div class="field"><label for="f-maiden">Maiden name</label><input class="inp" id="f-maiden" data-f="maiden" data-cap="1" value="'+esc(d.maiden||'')+'" placeholder="Levin" autocomplete="off"></div><div class="field"><label for="f-hebMaiden">Hebrew maiden name</label><input class="inp he" dir="rtl" lang="he" id="f-hebMaiden" data-f="hebMaiden" data-hn="1" value="'+esc(d.hebMaiden||'')+'" placeholder="לוין" autocomplete="off"></div></div>';
   h+='<div class="hebprev" id="hebprev">'+hebPreviewHTML(d)+'</div>';
   h+='<div class="fsec"><h4>Birth</h4>'+dateField('birth','Date of birth',d.birth,d.birthSunset,'<label class="check"><input type="checkbox" id="f-noyear" data-f="birthNoYear"'+(d.birthNoYear?' checked':'')+'>Year unknown</label><label class="check"><input type="checkbox" id="f-hideage" data-f="hideAge"'+(d.hideAge?' checked':'')+'>Don’t show age in PDFs</label>')+'</div>';
   h+='<div class="fsec"><h4>Passed away</h4><label class="check"><input type="checkbox" id="f-deceased" data-f="deceased" data-hn="1"'+(d.deceased?' checked':'')+'>This person has passed away</label><div id="death-wrap"'+(d.deceased?'':' hidden')+'>'+dateField('death','Date of passing (for the yahrzeit)',d.death,d.deathSunset)+'</div></div>';
@@ -1807,7 +1815,7 @@ function applyDraft(){
   if(!d.gender){drawer.err='Choose male or female.';drawer.keepScroll=true;renderDrawer();return;}
   var isNew=!d.id,id=d.id||uid('p');
   var par=[d.father,d.mother].filter(function(x,i,a){return x&&x!==id&&a.indexOf(x)===i;});
-  var p=normPerson({id:id,first:d.first.trim(),last:d.last.trim(),gender:d.gender,hebFirst:d.hebFirst.trim(),hebLast:d.hebLast.trim(),fatherHeb:d.father?'':d.fatherHeb.trim(),motherHeb:d.mother?'':d.motherHeb.trim(),birth:d.birth,birthSunset:d.birthSunset,birthNoYear:d.birthNoYear,hideAge:!!d.hideAge,deceased:d.deceased,death:d.deceased?d.death:'',deathSunset:d.deceased&&d.deathSunset,parents:par,others:d.others.filter(function(o){return o.date||o.title.trim();}).map(function(o){return {title:o.title.trim(),date:o.date,sunset:o.sunset};}),phone:d.phone.trim(),email:d.email.trim(),notes:d.notes});
+  var p=normPerson({id:id,first:d.first.trim(),last:d.last.trim(),gender:d.gender,hebFirst:d.hebFirst.trim(),hebLast:d.hebLast.trim(),maiden:d.gender==='m'?'':String(d.maiden||'').trim(),hebMaiden:d.gender==='m'?'':String(d.hebMaiden||'').trim(),fatherHeb:d.father?'':d.fatherHeb.trim(),motherHeb:d.mother?'':d.motherHeb.trim(),birth:d.birth,birthSunset:d.birthSunset,birthNoYear:d.birthNoYear,hideAge:!!d.hideAge,deceased:d.deceased,death:d.deceased?d.death:'',deathSunset:d.deceased&&d.deathSunset,parents:par,others:d.others.filter(function(o){return o.date||o.title.trim();}).map(function(o){return {title:o.title.trim(),date:o.date,sunset:o.sunset};}),phone:d.phone.trim(),email:d.email.trim(),notes:d.notes});
   if(isNew) data.people.push(p);
   else data.people[data.people.findIndex(function(x){return x.id===id;})]=p;
   var keep={};
@@ -2131,7 +2139,8 @@ function vecText(pdf){
     var cx=align==='right'?x-w:align==='center'?x-w/2:x;
     seq.forEach(function(s,i){
       var t=s.t,txt=t.w.replace(/ /g,' ');
-      if(t.rtl) txt=Array.from(txt).reverse().join('');
+      /* a Hebrew word is written in visual order: letters reversed, and brackets mirrored */
+      if(t.rtl) txt=Array.from(txt).reverse().join('').replace(/[()]/g,function(ch){return ch==='('?')':'(';});
       font(t.b,size);var c=rgb(t.c);pdf.setTextColor(c[0],c[1],c[2]);
       pdf.text(txt,cx,y,{baseline:'alphabetic',isInputVisual:true,isOutputVisual:true,isInputRtl:false,isOutputRtl:false});
       cx+=width(t.w,t.b,size)+(s.gap&&i<seq.length-1?sw:0);
@@ -2149,6 +2158,7 @@ function nameSegs(p,zl){
   if(q.first) out.push({t:q.first,b:true});
   if(q.rel) out.push({t:(out.length?' ':'')+q.rel});
   if(q.last) out.push({t:(out.length?' ':'')+q.last,b:true});
+  if(q.maiden) out.push({t:' ('+q.maiden+')',b:true});
   return out.concat(z);
 }
 function nameText(p,zl){
@@ -2766,6 +2776,10 @@ document.addEventListener('input',function(e){
   if(t.dataset&&t.dataset.hn) refreshHebPreview();
   var key=t.dataset&&(t.dataset.date||t.dataset.sunset);
   if(key){var el=$('[data-hprev="'+key+'"]');if(el) el.innerHTML=hprevText($('#d-'+key).value,$('#s-'+key).checked);}
+});
+document.addEventListener('focusout',function(e){
+  var t=e.target;
+  if(t&&(t.id==='f-first'||t.id==='f-last'||t.dataset&&t.dataset.cap||/^m-ne-\d+$/.test(t.id||''))){var v=capWords(t.value);if(v!==t.value) t.value=v;}
 });
 document.addEventListener('change',function(e){
   var t=e.target;
