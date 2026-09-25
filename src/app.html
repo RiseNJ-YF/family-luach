@@ -1052,7 +1052,20 @@ function chainOf(start,seen){
 var TPLACED=null;
 function isGhost(g,k){return !!(g.ghosts&&g.ghosts.indexOf(k)>=0);}
 function ghostSub(k){return {w:TW,h:TH,cx:TW/2,items:[{t:'card',id:k,x:0,y:0,ghost:true}],ct:[[0,TW]],leaf:true};}
-function ghostsOf(list,pos,other){return TPLACED?list.filter(function(k){return TPLACED[k]&&pos[k]==null&&other(k);}):[];}
+function ghostsOf(list,pos,other){return TPLACED?list.filter(function(k){return (TPLACED[k]||(FORCEG&&FORCEG[k]))&&pos[k]==null&&other(k);}):[];}
+/* When two relatives marry, the husband keeps his place under his parents and the wife is the one with
+   two cards (her real card next to him, a lighter copy under her own parents). After a first layout,
+   wives who ended up in their own place with the husband as the copy are moved, and the tree is laid
+   out again. */
+var FORCEG=null;
+function wivesToMove(ghostIds,TP){
+  var f={},any=false;
+  ghostIds.forEach(function(id){
+    if(P(id).gender!=='m'||TP[id]!==2) return;
+    spousesOf(id).forEach(function(sp){if(TP[sp.pid]===1&&P(sp.pid).gender==='f'){f[sp.pid]=1;any=true;}});
+  });
+  return any?f:null;
+}
 function linkPath(g,r){
   /* From the copy into the gap beside its row (above it when the real card is higher up, below it
      otherwise), across, then up or down into the real card. Rounded corners. */
@@ -1102,13 +1115,13 @@ function layoutFam(id,seen,depth){
   data.marriages.forEach(function(m){
     if(pos[m.a]==null||pos[m.b]==null) return;
     var g={m:m,i:Math.min(pos[m.a],pos[m.b]),j:Math.max(pos[m.a],pos[m.b])};
-    g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;});
+    g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k])&&P(k).parents.indexOf(m.b)>=0;});
     g.ghosts=ghostsOf(kidsOf(m.a),pos,function(k){return P(k).parents.indexOf(m.b)>=0;});
     g.kids.forEach(function(k){seen[k]=1;});
     marr.push(g);groups.push(g);
   });
   chain.forEach(function(x){
-    var ks=kidsOf(x).filter(function(k){return !seen[k];});
+    var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k]);});
     var gh=ghostsOf(kidsOf(x),pos,function(k){return !P(k).parents.some(function(q){return q!==x&&pos[q]!=null;});});
     ks.forEach(function(k){seen[k]=1;});
     if(ks.length||gh.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks,ghosts:gh});
@@ -1215,13 +1228,13 @@ function layoutPack(id,seen,depth){
   data.marriages.forEach(function(m){
     if(pos[m.a]==null||pos[m.b]==null) return;
     var g={m:m,i:Math.min(pos[m.a],pos[m.b]),j:Math.max(pos[m.a],pos[m.b])};
-    g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;});
+    g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k])&&P(k).parents.indexOf(m.b)>=0;});
     g.ghosts=ghostsOf(kidsOf(m.a),pos,function(k){return P(k).parents.indexOf(m.b)>=0;});
     g.kids.forEach(function(k){seen[k]=1;});
     marr.push(g);groups.push(g);
   });
   chain.forEach(function(x){
-    var ks=kidsOf(x).filter(function(k){return !seen[k];});
+    var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k]);});
     var gh=ghostsOf(kidsOf(x),pos,function(k){return !P(k).parents.some(function(q){return q!==x&&pos[q]!=null;});});
     ks.forEach(function(k){seen[k]=1;});
     if(ks.length||gh.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks,ghosts:gh});
@@ -1364,17 +1377,17 @@ var OIND=44,OCW=214,ORW=30,ORAD=8;
 function outlineRows(root){
   var rows=[],seen={};
   function walk(id,depth,pass,elbow){
-    var chain=chainOf(id,seen);chain.forEach(function(x){seen[x]=1;TPLACED[x]=1;});
+    var chain=chainOf(id,seen);chain.forEach(function(x){seen[x]=1;TPLACED[x]=x===id?1:2;});
     var ip={};chain.forEach(function(x,i){ip[x]=i;});
     var groups=[];
     data.marriages.forEach(function(m){
       if(ip[m.a]==null||ip[m.b]==null) return;
-      var g={m:m,kids:kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;})};
+      var g={m:m,kids:kidsOf(m.a).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k])&&P(k).parents.indexOf(m.b)>=0;})};
       g.ghosts=ghostsOf(kidsOf(m.a),ip,function(k){return P(k).parents.indexOf(m.b)>=0;});
       g.kids.forEach(function(k){seen[k]=1;});groups.push(g);
     });
     chain.forEach(function(x){
-      var ks=kidsOf(x).filter(function(k){return !seen[k];});
+      var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k]);});
       var gh=ghostsOf(kidsOf(x),ip,function(k){return !P(k).parents.some(function(q){return q!==x&&ip[q]!=null;});});
       ks.forEach(function(k){seen[k]=1;});if(ks.length||gh.length) groups.push({single:x,kids:ks,ghosts:gh});
     });
@@ -1401,7 +1414,11 @@ function outlineRows(root){
       });
     });
   }
-  TPLACED={};walk(root,0,[],null);TPLACED=null;
+  TPLACED={};walk(root,0,[],null);var TP=TPLACED;TPLACED=null;
+  if(!FORCEG){
+    var fm=wivesToMove(rows.filter(function(r){return r.ghost;}).map(function(r){return r.ids[0];}),TP);
+    if(fm){FORCEG=fm;try{return outlineRows(root);}finally{FORCEG=null;}}
+  }
   return rows;
 }
 function outlineRowHTML(r,root,placed,pdf,copies){
@@ -1461,9 +1478,10 @@ function mirrorTree(L){
 }
 function treeMarkup(root,pdf){
   if(ui.treeLayout==='outline') return '<div class="ftree otree'+(ui.calMode==='heb'?' rtl':'')+'">'+outlineParts(root,pdf).join('')+'</div>';
-  TPLACED={};
-  var L=ui.treeLayout==='classic'?layoutFam(root,{},0):layoutPack(root,{},0),placed={},h='',TP=TPLACED;
-  TPLACED=null;
+  var run=function(){TPLACED={};var l=ui.treeLayout==='classic'?layoutFam(root,{},0):layoutPack(root,{},0),tp=TPLACED;TPLACED=null;return [l,tp];};
+  var R1=run(),fm=wivesToMove(R1[0].items.filter(function(i){return i.t==='card'&&i.ghost;}).map(function(i){return i.id;}),R1[1]);
+  if(fm){FORCEG=fm;try{R1=run();}finally{FORCEG=null;}}
+  var L=R1[0],TP=R1[1],placed={},h='';
   /* The real card of someone who also has a linked copy (or whose parents' branch is closed) links back. */
   var cards={},copies={},notes={};
   L.items.forEach(function(it){if(it.t==='card'){if(it.ghost) copies[it.id]=1;else cards[it.id]=1;}});
