@@ -1207,8 +1207,9 @@ function layoutPack(id,seen,depth){
     var cs=subs.map(function(x){return x.ox+x.cx;});
     g.target=(Math.min.apply(null,cs)+Math.max.apply(null,cs))/2;
     if(rows.length>1){
-      var lo=Infinity;g.ct.forEach(function(c){if(c&&c[0]<lo) lo=c[0];});
-      g.trunk=lo-16;var last=rows[rows.length-1];
+      /* The line to the next row runs down just past the end of the rows (the right; the left in Hebrew). */
+      var hi=-Infinity;g.ct.forEach(function(c){if(c&&c[1]>hi) hi=c[1];});
+      g.trunk=hi+16;var last=rows[rows.length-1];
       for(var l=0;l<2*last.oy/TP;l++) ctAdd(g.ct,l,g.trunk-2,g.trunk+2);
     }
   });
@@ -1253,19 +1254,24 @@ function layoutPack(id,seen,depth){
     var y0=g.single!=null?TH:g.ly+(marriageOrd(g.m)?20:12);
     var busY=open.length===1?TH+VG/2:TH+16+Math.min(g.lvl,4)*13;
     if(g.rows.length>1){
-      /* Wrapped family: the first row hangs from the parents as usual; a line down the side feeds the other rows. */
-      var tx=g.L+g.trunk+sh,r0=g.rows[0].map(function(x){return g.L+x.ox+x.cx+sh;}),lastBus=busY;
-      items.push({t:'v',x:ax,y:y0,h:busY-y0});
-      var bl=Math.min(ax,tx,r0[0]),br=Math.max(ax,r0[r0.length-1]);
-      items.push({t:'h',x:bl,y:busY,w:br-bl+LW});
-      ctAdd(ct,1,bl,br);
+      /* Wrapped family: the line runs along the first row, carries on past its end, turns down and comes
+         back under that row to start the next one, reading on in the same direction. Every turn is rounded. */
+      var RR=10,tx=g.L+g.trunk+sh,rowY=g.rows.map(function(r,ri){return ri===0?busY:childY+r.oy-VG/2;});
+      var lastBus=rowY[rowY.length-1],c0=g.L+g.rows[0][0].ox+g.rows[0][0].cx+sh,from=Math.min(ax,c0);
+      if(ax<c0-1){
+        var rp=Math.max(0,Math.min(RR,(busY-y0)/2,(c0-ax)/2));
+        items.push({t:'el',c:'bl',x:ax,y:y0,w:rp,h:busY+LW-y0,r:rp});
+        items.push({t:'h',x:ax+rp,y:busY,w:c0-ax-rp});
+      } else items.push({t:'v',x:ax,y:y0,h:busY+LW-y0});
+      /* start the long run just after the first child's rounded corner, so that corner stays round */
+      var f0=ax<c0-1?from:c0+Math.min(RR,(childY-busY)/2);
+      items.push({t:'el',c:'tr',x:f0,y:busY,w:tx+LW-f0,h:lastBus-RR-busY+LW,r:RR});
       g.rows.forEach(function(r,ri){
-        var by=ri===0?busY:childY+r.oy-VG/2,cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
-        if(ri>0) items.push({t:'h',x:tx,y:by,w:cx[cx.length-1]-tx+LW});
-        cx.forEach(function(c){items.push({t:'v',x:c,y:by,h:childY+r.oy-by});});
-        lastBus=by;
+        var by=rowY[ri],top=childY+r.oy,cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
+        if(ri>0){var fr=cx[0]+Math.min(RR,(top-by)/2);items.push({t:'el',c:'br',x:fr,y:by-RR,w:tx+LW-fr,h:RR+LW,r:RR});}
+        cx.forEach(function(c){var rc=Math.min(RR,(top-by)/2);items.push({t:'el',c:'tl',x:c,y:by,w:rc+LW,h:top-by,r:rc});});
       });
-      items.push({t:'v',x:tx,y:busY,h:lastBus-busY+LW});
+      ctAdd(ct,1,from,tx+2);
     } else {
       var cxs=g.subs.map(function(x){return g.L+x.ox+x.cx+sh;});
       var left=cxs.filter(function(c){return c<ax-1;}),right=cxs.filter(function(c){return c>ax+1;}),mid=cxs.length-left.length-right.length;
