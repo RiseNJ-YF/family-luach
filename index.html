@@ -230,6 +230,18 @@ button:disabled{cursor:default;opacity:.6}
 .fring.ended{color:var(--ink-3)}
 .fring small{font-family:var(--sans);font-size:10px;color:var(--ink-3);font-weight:700}
 .fcell{position:absolute}
+.tchip{position:absolute;transform:translateX(-50%);border:1px solid var(--line-2);background:var(--surface);border-radius:999px;font-size:13px;font-weight:600;padding:3px 11px;color:var(--accent);white-space:nowrap;cursor:pointer;line-height:1.3}
+.tchip:hover{border-color:var(--accent)}
+.tchip.open{padding:0;width:24px;height:24px;line-height:21px;font-size:16px;color:var(--ink-2)}
+.otree{position:relative;width:max-content;margin:0}
+.otree.rtl{margin-left:auto}
+.otree .orow{position:relative;display:flex;align-items:stretch;padding-block:6px}
+.otree.rtl .orow{flex-direction:row-reverse}
+.otree .og{position:absolute;width:0;border-left:1.5px solid var(--line-2)}
+.otree .oh{position:absolute;top:50%;height:0;border-top:1.5px solid var(--line-2)}
+.otree .oring{align-self:center;color:var(--c-anniversary);padding:0 7px;font-size:15px}
+.otree .olabel{align-self:center;font-size:13px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px dashed var(--line-2);border-radius:999px;padding:3px 11px;white-space:nowrap}
+.otree .tcard{width:214px;height:auto;min-height:78px;padding:6px 10px}
 .tcell{position:relative;display:flex;flex-direction:column;align-items:center}
 .tcard{border:1px solid var(--line-2);background:var(--surface);border-radius:10px;padding:8px 9px 9px;width:172px;height:124px;overflow:hidden;text-align:center;display:flex;flex-direction:column;justify-content:center;gap:1px;line-height:1.2}
 .tcard>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -674,7 +686,7 @@ var ui={
   calMode:lsGet('fl-calmode','greg'),calSpan:lsGet('fl-calspan','month'),
   gCur:(function(){var g=gFromAbs(TODAY);return {y:g.y,m:g.m};})(),
   hCur:(function(){var h=H.fromAbs(TODAY);return {y:h.y,m:h.m};})(),
-  sel:TODAY,treeRoot:null,zoom:1,zoomFit:true,orient:lsGet('fl-orient','landscape'),q:'',sort:lsGet('fl-sort','name'),horizon:90,preview:false,panel:null,clearAsk:false
+  sel:TODAY,treeRoot:null,treeLayout:lsGet('fl-tlayout','compact'),treeOpen:{},zoom:1,zoomFit:true,orient:lsGet('fl-orient','landscape'),q:'',sort:lsGet('fl-sort','name'),horizon:90,preview:false,panel:null,clearAsk:false
 };
 var canWrite=false,artNs=null,saving=false,exporting=false;
 function editable(){return canWrite&&!ui.preview;}
@@ -716,6 +728,12 @@ function sizeTree(all){
   var w=$('#tree-wrap'),inner=$('#tree-zoom'),ft=w&&w.querySelector('.ftree');
   if(!w||!inner||!ft) return;
   w.style.height=Math.max(320,window.innerHeight-w.getBoundingClientRect().top-44)+'px';
+  if(ui.zoomFit&&ft.classList.contains('otree')){
+    /* The outline only needs to fit across; it scrolls down. */
+    setZoom(Math.max(0.5,Math.min(1,(w.clientWidth-32)/ft.offsetWidth)));w.scrollTop=0;
+    w.scrollLeft=ui.calMode==='heb'?w.scrollWidth:0;
+    return;
+  }
   if(ui.zoomFit){
     var tw=parseFloat(ft.style.width),th=parseFloat(ft.style.height);
     var z=Math.min((w.clientWidth-32)/tw,(w.clientHeight-64)/th,1.25);
@@ -1085,6 +1103,218 @@ function layoutFam(id,seen,depth){
   });
   return {w:maxX-minX,h:TH+(groups.length?VG+maxSubH:0),cx:xs[pos[id]]+sh+TW/2,items:items};
 }
+/* ---------- Tree layout options (all keep oldest → youngest; Hebrew mode mirrors them) ----------
+   classic  every family keeps its own strip (layoutFam above).
+   compact  families slide together wherever their rows don't touch, e.g. a row of grandchildren can
+            sit under an aunt who has no children of her own.
+   stack    compact, and brothers/sisters with no spouse or children stand in short columns (read down).
+   wrap     compact, and a family with more than 4 children lists them in 2 or more rows (read across).
+   branch   compact, and each family's children can be opened or closed.
+   outline  an indented list, one generation per step. */
+var TREE_LAYOUTS=[['compact','Compact'],['classic','Classic (spread out)'],['stack','Stack single siblings'],['wrap','Wrap big families'],['branch','Open & close branches'],['outline','Outline (list)']];
+if(!TREE_LAYOUTS.some(function(o){return o[0]===ui.treeLayout;})) ui.treeLayout='compact';
+/* A contour lists, for each level of a subtree, how far left and right it reaches: even levels are
+   rows of cards, odd levels the gaps between rows where the lines run. */
+var TP=TH+VG,STX=20,STG=14,CHW=130;
+function ctAdd(ct,l,a,b){var c=ct[l];if(c){if(a<c[0]) c[0]=a;if(b>c[1]) c[1]=b;}else ct[l]=[a,b];}
+function ctPut(dst,src,dx,dl){src.forEach(function(c,l){if(c) ctAdd(dst,l+(dl||0),c[0]+dx,c[1]+dx);});}
+function ctSep(a,b,gCard,gLine){var t=-Infinity;for(var l=0;l<Math.min(a.length,b.length);l++) if(a[l]&&b[l]){var v=a[l][1]+(l%2?gLine:gCard)-b[l][0];if(v>t) t=v;}return t;}
+function ctBand(ct,y0,y1,a,b){for(var k=Math.floor(y0/TP);k*TP<y1;k++){if(k*TP+TH>y0) ctAdd(ct,2*k,a,b);if(k*TP+TH<y1) ctAdd(ct,2*k+1,a,b);}}
+function branchOpen(key,depth){return ui.treeOpen[key]!=null?ui.treeOpen[key]:depth===0;}
+/* Brothers/sisters with nobody below them, stacked in one column with a line down its side. */
+function stackCol(ms){
+  var items=[],n=ms.length,hh=n*TH+(n-1)*STG,mid=function(j){return j*(TH+STG)+TH/2;};
+  items.push({t:'v',x:2,y:0,h:mid(n-1)});
+  ms.forEach(function(m,j){m.items.forEach(function(it){var c=Object.assign({},it);c.x+=STX;c.y+=j*(TH+STG);items.push(c);});items.push({t:'h',x:2,y:mid(j),w:STX-2});});
+  var ct=[];ctBand(ct,0,hh,0,STX+TW);
+  return {w:STX+TW,h:hh,cx:2,items:items,ct:ct};
+}
+function layoutPack(id,seen,depth){
+  var mode=ui.treeLayout,chain=chainOf(id,seen);
+  chain.forEach(function(x){seen[x]=1;});
+  var pos={};chain.forEach(function(x,i){pos[x]=i;});
+  var marr=[],groups=[];
+  data.marriages.forEach(function(m){
+    if(pos[m.a]==null||pos[m.b]==null) return;
+    var g={m:m,i:Math.min(pos[m.a],pos[m.b]),j:Math.max(pos[m.a],pos[m.b])};
+    g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;});
+    g.kids.forEach(function(k){seen[k]=1;});
+    marr.push(g);groups.push(g);
+  });
+  chain.forEach(function(x){
+    var ks=kidsOf(x).filter(function(k){return !seen[k];});
+    ks.forEach(function(k){seen[k]=1;});
+    if(ks.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks});
+  });
+  groups=groups.filter(function(g){return g.kids.length;}).sort(function(a,b){return (a.i+a.j)-(b.i+b.j);});
+  if(depth>=14) groups=[];
+  var n=chain.length,xs=chain.map(function(x,i){return i*(TW+SG);});
+  groups.forEach(function(g){
+    g.ax=g.single!=null?xs[g.i]+TW/2:(xs[g.i]+TW+xs[g.j])/2;
+    g.key=g.m?g.m.id:'s:'+g.single;
+    g.shut=mode==='branch'&&!branchOpen(g.key,depth);
+    g.kids.sort(byBirth);
+  });
+  var open=groups.filter(function(g){return !g.shut;});
+  open.forEach(function(g){
+    var subs=g.kids.map(function(k){return layoutPack(k,seen,depth+1);});
+    if(mode==='stack'){
+      var out=[],run=[];
+      var flush=function(){
+        if(run.length<2) out=out.concat(run);
+        else{var cols=Math.ceil(run.length/3),per=Math.ceil(run.length/cols);for(var i=0;i<run.length;i+=per) out.push(stackCol(run.slice(i,i+per)));}
+        run=[];
+      };
+      subs.forEach(function(x){if(x.leaf) run.push(x);else{flush();out.push(x);}});flush();subs=out;
+    }
+    var rows=[subs];
+    /* Only a family whose children have no children of their own wraps, so every row is one generation. */
+    if(mode==='wrap'&&subs.length>4&&subs.every(function(x){return x.h<=TH+1;})){var nr=Math.ceil(subs.length/4),per=Math.ceil(subs.length/nr);rows=[];for(var i=0;i<subs.length;i+=per) rows.push(subs.slice(i,i+per));}
+    g.subs=subs;g.rows=rows;g.ct=[];
+    var oy=0;
+    rows.forEach(function(r){
+      var acc=null,mh=0;
+      r.forEach(function(x){x.ox=acc?ctSep(acc,x.ct,SIB,14):0;x.oy=oy;if(!acc) acc=[];ctPut(acc,x.ct,x.ox);if(x.h>mh) mh=x.h;});
+      r.oy=oy;ctPut(g.ct,acc,0,2*oy/TP);
+      oy+=Math.ceil((mh+VG)/TP)*TP;
+    });
+    var cs=subs.map(function(x){return x.ox+x.cx;});
+    g.target=(Math.min.apply(null,cs)+Math.max.apply(null,cs))/2;
+    if(rows.length>1){
+      var lo=Infinity;g.ct.forEach(function(c){if(c&&c[0]<lo) lo=c[0];});
+      g.trunk=lo-16;var last=rows[rows.length-1];
+      for(var l=0;l<2*last.oy/TP;l++) ctAdd(g.ct,l,g.trunk-2,g.trunk+2);
+    }
+  });
+  /* Each family's children want to be centred under their parents; families whose rows would touch
+     are merged into a cluster centred on the average of their parents. */
+  var cl=[];
+  open.forEach(function(g){
+    g.rel=0;cl.push({gs:[g],ct:g.ct,L:g.ax-g.target});
+    while(cl.length>1){
+      var b=cl[cl.length-1],a=cl[cl.length-2],need=ctSep(a.ct,b.ct,GG,14);
+      if(a.L+need<=b.L) break;
+      var ct=[];ctPut(ct,a.ct,0);ctPut(ct,b.ct,need);
+      b.gs.forEach(function(x){x.rel+=need;});
+      var gs=a.gs.concat(b.gs),sum=0;gs.forEach(function(x){sum+=(x.ax-x.target)-x.rel;});
+      cl.splice(cl.length-2,2,{gs:gs,ct:ct,L:sum/gs.length});
+    }
+  });
+  cl.forEach(function(c){c.gs.forEach(function(g){g.L=c.L+g.rel;});});
+  var minX=xs[0],maxX=xs[n-1]+TW;
+  open.forEach(function(g){g.ct.forEach(function(c){if(c){minX=Math.min(minX,g.L+c[0]);maxX=Math.max(maxX,g.L+c[1]);}});});
+  groups.forEach(function(g){if(g.shut){minX=Math.min(minX,g.ax-CHW/2);maxX=Math.max(maxX,g.ax+CHW/2);}});
+  var sh=-minX,items=[],ct=[];
+  chain.forEach(function(x,i){items.push({t:'card',id:x,x:xs[i]+sh,y:0});});
+  ctAdd(ct,0,xs[0]+sh,xs[n-1]+TW+sh);
+  marr.forEach(function(g){
+    var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
+    items.push({t:'h',x:x1,y:TH/2,w:x2-x1,cls:'mar'+(ended?' ended':'')});
+    items.push({t:'ring',x:(x1+x2)/2,y:TH/2,label:marriageOrd(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
+  });
+  var childY=TH+VG,maxSubH=0,LW=1.5;
+  groups.forEach(function(g){
+    if(!g.shut) return;
+    var ax=g.ax+sh,y0=g.single!=null?TH:TH/2+(marriageOrd(g.m)?20:12);
+    items.push({t:'v',x:ax,y:y0,h:TH+14-y0});
+    items.push({t:'chip',x:ax,y:TH+14,k:g.key,n:g.kids.length});
+    ctAdd(ct,1,ax-CHW/2,ax+CHW/2);
+  });
+  var reach=open.map(function(g,gi){return {gi:gi,d:Math.abs(g.L+g.target-g.ax)};}).sort(function(a,b){return b.d-a.d;});
+  reach.forEach(function(r,lvl){open[r.gi].lvl=lvl;});
+  open.forEach(function(g){
+    var ax=g.ax+sh;
+    var y0=g.single!=null?TH:TH/2+(marriageOrd(g.m)?20:12);
+    var busY=open.length===1?TH+VG/2:TH+16+Math.min(g.lvl,4)*13;
+    if(g.rows.length>1){
+      /* Wrapped family: the first row hangs from the parents as usual; a line down the side feeds the other rows. */
+      var tx=g.L+g.trunk+sh,r0=g.rows[0].map(function(x){return g.L+x.ox+x.cx+sh;}),lastBus=busY;
+      items.push({t:'v',x:ax,y:y0,h:busY-y0});
+      var bl=Math.min(ax,tx,r0[0]),br=Math.max(ax,r0[r0.length-1]);
+      items.push({t:'h',x:bl,y:busY,w:br-bl+LW});
+      ctAdd(ct,1,bl,br);
+      g.rows.forEach(function(r,ri){
+        var by=ri===0?busY:childY+r.oy-VG/2,cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
+        if(ri>0) items.push({t:'h',x:tx,y:by,w:cx[cx.length-1]-tx+LW});
+        cx.forEach(function(c){items.push({t:'v',x:c,y:by,h:childY+r.oy-by});});
+        lastBus=by;
+      });
+      items.push({t:'v',x:tx,y:busY,h:lastBus-busY+LW});
+    } else {
+      var cxs=g.subs.map(function(x){return g.L+x.ox+x.cx+sh;});
+      var left=cxs.filter(function(c){return c<ax-1;}),right=cxs.filter(function(c){return c>ax+1;}),mid=cxs.length-left.length-right.length;
+      var R=function(dx){return Math.max(0,Math.min(10,Math.abs(dx)/2,(childY-busY)/2,(busY-y0)/2));};
+      var xL=ax+LW,xR=ax;
+      if(left.length&&!right.length&&!mid){var r1=R(ax-left[left.length-1]);items.push({t:'el',c:'br',x:ax+LW-r1,y:y0,w:r1,h:busY+LW-y0,r:r1});xL=ax+LW-r1;}
+      else if(right.length&&!left.length&&!mid){var r2=R(right[0]-ax);items.push({t:'el',c:'bl',x:ax,y:y0,w:r2,h:busY+LW-y0,r:r2});xR=ax+r2;}
+      else items.push({t:'v',x:ax,y:y0,h:(mid&&!left.length&&!right.length?childY:busY+LW)-y0});
+      left.forEach(function(cx){var r=R(ax-cx);items.push({t:'el',c:'tl',x:cx,y:busY,w:xL-cx,h:childY-busY,r:r});});
+      right.forEach(function(cx){var r=R(cx-ax);items.push({t:'el',c:'tr',x:xR,y:busY,w:cx+LW-xR,h:childY-busY,r:r});});
+      if(mid&&(left.length||right.length)) items.push({t:'v',x:ax,y:busY,h:childY-busY});
+      ctAdd(ct,1,Math.min(ax,cxs[0]),Math.max(ax,cxs[cxs.length-1]));
+    }
+    if(mode==='branch'&&depth>0) items.push({t:'chip',x:ax,y:TH+2,k:g.key,open:true});
+    ctPut(ct,g.ct,g.L+sh,2);
+    g.subs.forEach(function(x){
+      var ox=g.L+x.ox+sh;
+      x.items.forEach(function(it){var c=Object.assign({},it);c.x+=ox;c.y+=childY+x.oy;items.push(c);});
+      if(x.oy+x.h>maxSubH) maxSubH=x.oy+x.h;
+    });
+  });
+  var hh=open.length?TH+VG+maxSubH:groups.length?TH+44:TH;
+  return {w:maxX-minX,h:hh,cx:xs[pos[id]]+sh+TW/2,items:items,ct:ct,leaf:n===1&&!groups.length};
+}
+/* Outline: one row per family (the person, then their husband or wife), children indented under
+   them; with more than one marriage, a small label says which marriage the children are from. */
+function outlineRows(root){
+  var rows=[],seen={};
+  function nm(id){var p=P(id);return p.hebFirst||p.first||'';}
+  function walk(id,depth,guides,last){
+    var chain=chainOf(id,seen);chain.forEach(function(x){seen[x]=1;});
+    var pos={};chain.forEach(function(x,i){pos[x]=i;});
+    var groups=[];
+    data.marriages.forEach(function(m){
+      if(pos[m.a]==null||pos[m.b]==null) return;
+      var g={m:m,i:Math.min(pos[m.a],pos[m.b]),j:Math.max(pos[m.a],pos[m.b])};
+      g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;});
+      g.kids.forEach(function(k){seen[k]=1;});groups.push(g);
+    });
+    chain.forEach(function(x){var ks=kidsOf(x).filter(function(k){return !seen[k];});ks.forEach(function(k){seen[k]=1;});if(ks.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks});});
+    /* No left/right to respect here, so each marriage's children simply follow in birth order. */
+    groups=groups.filter(function(g){return g.kids.length;});
+    groups.forEach(function(g){g.kids.sort(byBirth);});
+    groups.sort(function(a,b){return byBirth(a.kids[0],b.kids[0]);});
+    if(depth>=28) groups=[];
+    var sp=spousesOf(id).map(function(x){return x.pid;}).filter(function(x){return pos[x]!=null;});
+    rows.push({t:'fam',ids:[id].concat(sp,chain.filter(function(x){return x!==id&&sp.indexOf(x)<0;})),depth:depth,guides:guides,last:last,kids:groups.length>0});
+    var g2=depth>0?guides.concat([!last]):guides,multi=groups.length>1;
+    groups.forEach(function(g,gi){
+      var gl=gi===groups.length-1;g.kids.sort(byBirth);
+      if(multi){
+        var text=g.single!=null?nm(g.single):(g.m.a===id||g.m.b===id)?'with '+nm(g.m.a===id?g.m.b:g.m.a):nm(g.m.a)+' & '+nm(g.m.b);
+        rows.push({t:'label',text:text,depth:depth+1,guides:g2,last:gl,kids:true});
+        var g3=g2.concat([!gl]);
+        g.kids.forEach(function(k,ki){walk(k,depth+2,g3,ki===g.kids.length-1);});
+      } else g.kids.forEach(function(k,ki){walk(k,depth+1,g2,ki===g.kids.length-1);});
+    });
+  }
+  walk(root,0,[],true);
+  return rows;
+}
+function outlineRowHTML(r,root,placed,pdf){
+  var S=ui.calMode==='heb'?'right':'left',IND=30,x0=r.depth*IND,h='<div class="orow" style="padding-'+S+':'+x0+'px">';
+  r.guides.forEach(function(on,j){if(on) h+='<i class="og" style="'+S+':'+(j*IND+12)+'px;top:0;bottom:0"></i>';});
+  if(r.depth>0){var ex=(r.depth-1)*IND+12;h+='<i class="og" style="'+S+':'+ex+'px;top:0;'+(r.last?'height:50%':'bottom:0')+'"></i><i class="oh" style="'+S+':'+ex+'px;width:'+(x0-ex)+'px"></i>';}
+  if(r.kids) h+='<i class="og" style="'+S+':'+(x0+12)+'px;bottom:0;height:6px"></i>';
+  if(r.t==='label') h+='<span class="olabel">'+esc(r.text)+'</span>';
+  else h+=r.ids.map(function(id){return tcard(P(id),id===root,placed,pdf);}).join('<span class="oring">⚭</span>');
+  return h+'</div>';
+}
+function outlineParts(root,pdf){
+  var rows=outlineRows(root),placed={};
+  rows.forEach(function(r){(r.ids||[]).forEach(function(id){placed[id]=1;});});
+  return rows.map(function(r){return outlineRowHTML(r,root,placed,pdf);});
+}
 function currentRoot(){var roots=treeRoots();return ui.treeRoot&&P(ui.treeRoot)?ui.treeRoot:(roots[0]?roots[0].id:data.people[0].id);}
 /* In Hebrew mode the tree reads right to left: the whole layout is mirrored, so the oldest child
    and a first spouse on the left. */
@@ -1092,7 +1322,7 @@ function mirrorTree(L){
   var W=L.w,LW=1.5,swap={tl:'tr',tr:'tl',bl:'br',br:'bl'};
   L.items.forEach(function(it){
     if(it.t==='card') it.x=W-it.x-TW;
-    else if(it.t==='ring') it.x=W-it.x;
+    else if(it.t==='ring'||it.t==='chip') it.x=W-it.x;
     else if(it.t==='h') it.x=W-it.x-it.w;
     else if(it.t==='v') it.x=W-it.x-LW;
     else if(it.t==='el'){it.x=W-it.x-it.w;it.c=swap[it.c];}
@@ -1100,7 +1330,8 @@ function mirrorTree(L){
   return L;
 }
 function treeMarkup(root,pdf){
-  var L=layoutFam(root,{},0),placed={},h='';
+  if(ui.treeLayout==='outline') return '<div class="ftree otree'+(ui.calMode==='heb'?' rtl':'')+'">'+outlineParts(root,pdf).join('')+'</div>';
+  var L=ui.treeLayout==='classic'?layoutFam(root,{},0):layoutPack(root,{},0),placed={},h='';
   if(ui.calMode==='heb') mirrorTree(L);
   L.items.forEach(function(it){if(it.t==='card') placed[it.id]=1;});
   L.items.forEach(function(it){
@@ -1113,6 +1344,7 @@ function treeMarkup(root,pdf){
     var y=it.y+TPAD;
     if(it.t==='ring') h+='<span class="fring'+(it.ended?' ended':'')+'" style="left:'+it.x+'px;top:'+y+'px" title="'+esc(it.title)+'">⚭'+(it.label?'<small>'+it.label+'</small>':'')+'</span>';
     else if(it.t==='card') h+='<div class="fcell" style="left:'+it.x+'px;top:'+y+'px">'+tcard(P(it.id),it.id===root,placed,pdf)+'</div>';
+    else if(it.t==='chip'&&!(pdf&&it.open)) h+='<button class="tchip'+(it.open?' open':'')+'" data-act="branch" data-k="'+esc(it.k)+'" style="left:'+it.x+'px;top:'+y+'px" title="'+(it.open?'Hide these children':'Show these children')+'">'+(it.open?'−':'+ '+it.n+(it.n===1?' child':' children'))+'</button>';
   });
   return '<div class="ftree" style="width:'+Math.ceil(L.w)+'px;height:'+Math.ceil(L.h+TPAD+4)+'px">'+h+'</div>';
 }
@@ -1122,6 +1354,8 @@ function viewTree(){
   var inList=false;
   roots.forEach(function(p){var on=p.id===root||spousesOf(p.id).some(function(s){return s.pid===root;});if(on) inList=true;h+='<option value="'+esc(p.id)+'"'+(on?' selected':'')+'>'+esc(coupleLabel(p))+'</option>';});
   if(!inList) h+='<option value="'+esc(root)+'" selected>'+esc(coupleLabel(rp))+'</option>';
+  h+='</select></label><label for="tree-layout">Layout <select class="sel" id="tree-layout" data-act-change="tree-layout">';
+  TREE_LAYOUTS.forEach(function(o){h+='<option value="'+o[0]+'"'+(ui.treeLayout===o[0]?' selected':'')+'>'+o[1]+'</option>';});
   h+='</select></label><div class="cal-nav">';
   var par=rp.parents.filter(function(x){return P(x);});
   if(par.length) h+='<button class="btn sm" data-act="root" data-pid="'+esc(par[0])+'">↑ Up a generation</button>';
@@ -1539,7 +1773,9 @@ function exportSpec(kind){
     spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub;spec.file='Calendar '+mt.t;spec.body=pxMonthGrid(PW-80);
   } else if(ui.view==='tree'){
     var root=currentRoot();
-    spec.fit=true;spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';spec.body=treeMarkup(root,true);
+    spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';
+    if(ui.treeLayout==='outline') spec.blocks=outlineParts(root,true).map(function(r){return {html:'<div class="otree'+(ui.calMode==='heb'?' rtl':'')+'">'+r+'</div>'};});
+    else{spec.fit=true;spec.body=treeMarkup(root,true);}
   } else if(ui.view==='people'){
     spec.title='Family directory · '+data.people.length+' people';spec.file='Family directory';
     spec.pageHead='<div class="px-prow h"><span>Name</span><span>English name</span><span>Born</span><span>Age</span><span>Married to</span><span>Children</span><span>Grandchildren</span></div>';
@@ -2100,6 +2336,11 @@ document.addEventListener('click',function(e){
     case 'open':openPerson(pid);break;
     case 'show-tree':ui.treeRoot=topAncestor(pid);ui.view='tree';lsSet('fl-view','tree');drawer=null;renderAll();window.scrollTo(0,0);break;
     case 'root':ui.treeRoot=pid;ui.zoomFit=true;render();break;
+    case 'branch':
+      var bw=$('#tree-wrap'),bl=bw?bw.scrollLeft:0,bt=bw?bw.scrollTop:0;
+      ui.treeOpen[t.dataset.k]=!t.classList.contains('open');ui.zoomFit=false;render();
+      bw=$('#tree-wrap');if(bw){bw.scrollLeft=bl;bw.scrollTop=bt;}
+      break;
     case 'tree-here':ui.treeRoot=pid;ui.zoomFit=true;ui.view='tree';lsSet('fl-view','tree');drawer=null;renderAll();window.scrollTo(0,0);break;
     case 'zoom':
       var z=+t.dataset.z,tw=$('#tree-wrap');
@@ -2182,6 +2423,7 @@ document.addEventListener('change',function(e){
   if(t.id==='import-file'&&t.files&&t.files[0]){importData(t.files[0]);t.value='';return;}
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;ui.zoomFit=true;render();}
+  if(a==='tree-layout'){ui.treeLayout=t.value;lsSet('fl-tlayout',t.value);ui.zoomFit=true;render();}
   if(a==='sort'){ui.sort=t.value;lsSet('fl-sort',ui.sort);$('#people-grid').innerHTML=peopleCards();}
 });
 /* Tree: wheel / trackpad pinch zooms; drag on the background pans. */
