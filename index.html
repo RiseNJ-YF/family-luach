@@ -236,6 +236,10 @@ button:disabled{cursor:default;opacity:.6}
 .fring.ended{color:var(--ink-3)}
 .fring small{font-family:var(--sans);font-size:10px;color:var(--ink-3);font-weight:700}
 .fcell{position:absolute}
+.tcard.ghost{border-style:dashed;background:var(--bg);box-shadow:none}
+.tcard.ghost .tn,.tcard.ghost .tl,.tcard.ghost .td{opacity:.55}
+.tcard.ghost .tk{color:var(--accent);font-weight:600}
+.tcard.flash{outline:3px solid var(--accent);outline-offset:3px}
 .tchip{position:absolute;transform:translateX(-50%);border:1px solid var(--line-2);background:var(--surface);border-radius:999px;font-size:13px;font-weight:600;padding:3px 11px;color:var(--accent);white-space:nowrap;cursor:pointer;line-height:1.3}
 .tchip:hover{border-color:var(--accent)}
 .tchip.open{padding:0;width:24px;height:24px;line-height:21px;font-size:16px;color:var(--ink-2)}
@@ -731,6 +735,26 @@ function render(){
   if(dirty&&canWrite) h+='<div class="savebar" role="status"><span>'+(saving?'Saving…':'Unsaved changes — family members won’t see them until you save.')+'</span><button class="btn sm ghost" data-act="discard"'+(saving?' disabled':'')+'>Discard</button><button class="btn sm primary" data-act="save"'+(saving?' disabled':'')+'>Save</button></div>';
   $('#app').innerHTML=h;
   if(ui.view==='tree') sizeTree();
+  if(ui.view==='tree'&&ui.treeLayout==='outline') outlineLinks();
+}
+/* Outline: a dashed line from each linked copy out to the side, along, and into the real card (drawn after
+   the rows are laid out, underneath everything). */
+function outlineLinks(){
+  var ot=$('.otree');if(!ot) return;
+  var z=parseFloat(($('#tree-zoom')||{style:{}}).style.zoom)||1,ob=ot.getBoundingClientRect(),heb=ot.classList.contains('rtl'),paths='',n=0,R=10;
+  var loc=function(e){var b=e.getBoundingClientRect();return {l:(b.left-ob.left)/z,r:(b.right-ob.left)/z,m:((b.top+b.bottom)/2-ob.top)/z};};
+  $$('.tcard.ghost',ot).forEach(function(g){
+    var real=$$('.tcard',ot).filter(function(c){return c.dataset.pid===g.dataset.pid&&!c.classList.contains('ghost');})[0];
+    if(!real) return;
+    var G=loc(g),Q=loc(real),sx=heb?-1:1,x0=heb?G.l:G.r,x1=heb?Q.l:Q.r;
+    var xv=heb?Math.min(G.l,Q.l)-18-n*8:Math.max(G.r,Q.r)+18+n*8,sy=Q.m>G.m?1:-1,rr=Math.min(R,Math.abs(Q.m-G.m)/2);n++;
+    paths+='<path d="M'+x0+' '+G.m+'L'+(xv-sx*rr)+' '+G.m+'Q'+xv+' '+G.m+' '+xv+' '+(G.m+sy*rr)+'L'+xv+' '+(Q.m-sy*rr)+'Q'+xv+' '+Q.m+' '+(xv-sx*rr)+' '+Q.m+'L'+x1+' '+Q.m+'"/>';
+  });
+  if(!paths) return;
+  /* room beside the rows for the line to turn (on the left in Hebrew) */
+  var pad=40+n*8,svg=linkSVG(heb?'<g transform="translate('+pad+',0)">'+paths+'</g>':paths,ot.offsetWidth+pad,ot.offsetHeight);
+  if(heb) svg=svg.replace('left:0;','left:'+(-pad)+'px;');
+  ot.insertAdjacentHTML('afterbegin',svg);
 }
 /* The tree box fills the rest of the window; in "fit" mode the whole tree is scaled to fit inside it. */
 function sizeTree(all){
@@ -978,7 +1002,7 @@ function treeRoots(){
 }
 function countDesc(id){return genCounts(id).reduce(function(a,b){return a+b;},0);}
 function coupleLabel(p){return chainOf(p.id,{}).map(function(id){return primaryText(P(id));}).join(' & ');}
-function tcard(p,isRoot,placed,pdf){
+function tcard(p,isRoot,placed,pdf,ghost){
   var b=parseISO(p.birth),d=parseISO(p.death),dates='',hd='';
   /* Hebrew-mode tree PDF, age hidden: the Hebrew date (day and month only) instead of the English one. */
   if(pdf&&noAge(p)&&ui.calMode==='heb'&&(p.deceased?d:b&&!p.birthNoYear)){hd=fmtHe(p.deceased?hebOf(p.death,p.deathSunset):hebOf(p.birth,p.birthSunset),false);dates=p.deceased?'Yahrzeit ':'Birthday ';}
@@ -990,7 +1014,8 @@ function tcard(p,isRoot,placed,pdf){
   var par=p.parents.filter(function(x){return P(x);});
   var h='<div class="tcell">';
   if(par.length&&!isRoot&&!par.some(function(x){return placed[x];})) h+='<button class="upbtn" data-act="root" data-pid="'+esc(par[0])+'" title="Show this side of the family">↑ '+(p.hebFirst?'<bdi dir="rtl" lang="he">'+esc(p.hebFirst)+'</bdi> — family':esc(p.first||'Their')+'’s family')+'</button>';
-  h+='<button class="tcard'+(p.gender?' '+p.gender:'')+(p.deceased?' dec':'')+(isRoot?' root':'')+'" data-act="open" data-pid="'+esc(p.id)+'" title="'+esc(primaryText(p)+(hn?' — '+fullName(p):''))+'">';
+  var gsp=ghost?spousesOf(p.id).map(function(s){var q=P(s.pid);return q.hebFirst||q.first||'';}).filter(Boolean):[];
+  h+='<button class="tcard'+(p.gender?' '+p.gender:'')+(p.deceased?' dec':'')+(isRoot?' root':'')+(ghost?' ghost':'')+'" data-act="'+(ghost?'goto':'open')+'" data-pid="'+esc(p.id)+'" title="'+esc(ghost?'Also shown next to '+(gsp.join(' & ')||'their husband or wife')+' — tap to go there':primaryText(p)+(hn?' — '+fullName(p):''))+'">';
   if(hn){
     h+='<span class="tn he'+(hn.length>40?' xlong':hn.length>24?' long':'')+'" dir="rtl" lang="he">'+hebPartsHTML(p)+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     h+='<span class="tl">'+esc(fullName(p))+'</span>';
@@ -999,6 +1024,7 @@ function tcard(p,isRoot,placed,pdf){
     if(p.last) h+='<span class="tl">'+esc(p.last)+'</span>';
   }
   if(dates) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
+  if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
   if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gc[1]?' · '+gc[1]+' grand':'')+'</span>';
   var so=soloOf(p.id);
   if(so.length) h+='<span class="tk">⚭ '+so.map(function(m){return soloName(m)?esc(soloName(m)):'married';}).join(', ')+'</span>';
@@ -1022,6 +1048,21 @@ function chainOf(start,seen){
   others(start).forEach(function(s){seq=seq.concat(expR(s));});
   return seq;
 }
+/* Someone who already sits elsewhere in the tree, e.g. cousins who married each other (they sit next to
+   their husband or wife), also gets a lighter "linked copy" under their own parents; a dashed line
+   runs from the copy to their real card, underneath all other lines and cards. */
+var TPLACED=null;
+function isGhost(g,k){return !!(g.ghosts&&g.ghosts.indexOf(k)>=0);}
+function ghostSub(k){return {w:TW,h:TH,cx:TW/2,items:[{t:'card',id:k,x:0,y:0,ghost:true}],ct:[[0,TW]],leaf:true};}
+function ghostsOf(list,pos,other){return TPLACED?list.filter(function(k){return TPLACED[k]&&pos[k]==null&&other(k);}):[];}
+function linkPath(g,r){
+  var R=10,gx=g.x+TW/2,gy=g.y+TPAD+TH,rx=r.x+TW/2,rt=r.y+TPAD,rb=rt+TH,yh=gy+10,ey=rb<=yh?rb:rt;
+  var dx=rx-gx,sx=dx>=0?1:-1,sy=ey>yh?1:-1,rr;
+  rr=Math.min(R,Math.abs(dx)/2,Math.abs(ey-yh));
+  var d='M'+gx+' '+gy+'L'+gx+' '+(yh-rr)+'Q'+gx+' '+yh+' '+(gx+sx*rr)+' '+yh+'L'+(rx-sx*rr)+' '+yh+'Q'+rx+' '+yh+' '+rx+' '+(yh+sy*rr)+'L'+rx+' '+ey;
+  return '<path d="'+d+'"/>';
+}
+function linkSVG(paths,w,h){return paths?'<svg class="flink" width="'+Math.ceil(w)+'" height="'+Math.ceil(h)+'" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none" fill="none" stroke="#8C7AB5" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round">'+paths+'</svg>':'';}
 /* Where a family's children hang from, left to right: a marriage's label sits in the gap just before
    its husband or wife; a single parent's children hang from that parent's card. */
 function grpPos(g){return g.single!=null?g.i:g.j-0.5;}
@@ -1052,27 +1093,29 @@ function marriageOrd(m){
 }
 function layoutFam(id,seen,depth){
   var chain=chainOf(id,seen);
-  chain.forEach(function(x){seen[x]=1;});
+  chain.forEach(function(x){seen[x]=1;if(TPLACED) TPLACED[x]=1;});
   var pos={};chain.forEach(function(x,i){pos[x]=i;});
   var marr=[],groups=[];
   data.marriages.forEach(function(m){
     if(pos[m.a]==null||pos[m.b]==null) return;
     var g={m:m,i:Math.min(pos[m.a],pos[m.b]),j:Math.max(pos[m.a],pos[m.b])};
     g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;});
+    g.ghosts=ghostsOf(kidsOf(m.a),pos,function(k){return P(k).parents.indexOf(m.b)>=0;});
     g.kids.forEach(function(k){seen[k]=1;});
     marr.push(g);groups.push(g);
   });
   chain.forEach(function(x){
     var ks=kidsOf(x).filter(function(k){return !seen[k];});
+    var gh=ghostsOf(kidsOf(x),pos,function(k){return !P(k).parents.some(function(q){return q!==x&&pos[q]!=null;});});
     ks.forEach(function(k){seen[k]=1;});
-    if(ks.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks});
+    if(ks.length||gh.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks,ghosts:gh});
   });
-  groups=groups.filter(function(g){return g.kids.length;}).sort(function(a,b){return grpPos(a)-grpPos(b);});
+  groups=groups.filter(function(g){if(g.ghosts&&g.ghosts.length) g.kids=g.kids.concat(g.ghosts);return g.kids.length;}).sort(function(a,b){return grpPos(a)-grpPos(b);});
   if(depth>=14) groups=[];
   var bx=0;
   groups.forEach(function(g){
     g.kids.sort(byBirth);
-    g.subs=g.kids.map(function(k){return layoutFam(k,seen,depth+1);});
+    g.subs=g.kids.map(function(k){return isGhost(g,k)?ghostSub(k):layoutFam(k,seen,depth+1);});
     var w=0;g.subs.forEach(function(s,i){s.ox=w;w+=s.w+(i<g.subs.length-1?SIB:0);});
     g.L=bx;g.w=w;bx+=w+GG;
     var f=g.subs[0],l=g.subs[g.subs.length-1];
@@ -1163,22 +1206,24 @@ function stackCol(ms){
 }
 function layoutPack(id,seen,depth){
   var mode=ui.treeLayout,chain=chainOf(id,seen);
-  chain.forEach(function(x){seen[x]=1;});
+  chain.forEach(function(x){seen[x]=1;if(TPLACED) TPLACED[x]=1;});
   var pos={};chain.forEach(function(x,i){pos[x]=i;});
   var marr=[],groups=[];
   data.marriages.forEach(function(m){
     if(pos[m.a]==null||pos[m.b]==null) return;
     var g={m:m,i:Math.min(pos[m.a],pos[m.b]),j:Math.max(pos[m.a],pos[m.b])};
     g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;});
+    g.ghosts=ghostsOf(kidsOf(m.a),pos,function(k){return P(k).parents.indexOf(m.b)>=0;});
     g.kids.forEach(function(k){seen[k]=1;});
     marr.push(g);groups.push(g);
   });
   chain.forEach(function(x){
     var ks=kidsOf(x).filter(function(k){return !seen[k];});
+    var gh=ghostsOf(kidsOf(x),pos,function(k){return !P(k).parents.some(function(q){return q!==x&&pos[q]!=null;});});
     ks.forEach(function(k){seen[k]=1;});
-    if(ks.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks});
+    if(ks.length||gh.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks,ghosts:gh});
   });
-  groups=groups.filter(function(g){return g.kids.length;}).sort(function(a,b){return grpPos(a)-grpPos(b);});
+  groups=groups.filter(function(g){if(g.ghosts&&g.ghosts.length) g.kids=g.kids.concat(g.ghosts);return g.kids.length;}).sort(function(a,b){return grpPos(a)-grpPos(b);});
   if(depth>=14) groups=[];
   var n=chain.length,xs=chain.map(function(x,i){return i*(TW+SG);});
   marLines(marr,xs);
@@ -1190,7 +1235,7 @@ function layoutPack(id,seen,depth){
   });
   var open=groups.filter(function(g){return !g.shut;});
   open.forEach(function(g){
-    var subs=g.kids.map(function(k){return layoutPack(k,seen,depth+1);});
+    var subs=g.kids.map(function(k){return isGhost(g,k)?ghostSub(k):layoutPack(k,seen,depth+1);});
     if(mode==='stack'){
       var out=[],run=[];
       var flush=function(){
@@ -1316,16 +1361,21 @@ var OIND=44,OCW=214,ORW=30,ORAD=8;
 function outlineRows(root){
   var rows=[],seen={};
   function walk(id,depth,pass,elbow){
-    var chain=chainOf(id,seen);chain.forEach(function(x){seen[x]=1;});
+    var chain=chainOf(id,seen);chain.forEach(function(x){seen[x]=1;TPLACED[x]=1;});
     var ip={};chain.forEach(function(x,i){ip[x]=i;});
     var groups=[];
     data.marriages.forEach(function(m){
       if(ip[m.a]==null||ip[m.b]==null) return;
       var g={m:m,kids:kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;})};
+      g.ghosts=ghostsOf(kidsOf(m.a),ip,function(k){return P(k).parents.indexOf(m.b)>=0;});
       g.kids.forEach(function(k){seen[k]=1;});groups.push(g);
     });
-    chain.forEach(function(x){var ks=kidsOf(x).filter(function(k){return !seen[k];});ks.forEach(function(k){seen[k]=1;});if(ks.length) groups.push({single:x,kids:ks});});
-    groups=groups.filter(function(g){return g.kids.length;});
+    chain.forEach(function(x){
+      var ks=kidsOf(x).filter(function(k){return !seen[k];});
+      var gh=ghostsOf(kidsOf(x),ip,function(k){return !P(k).parents.some(function(q){return q!==x&&ip[q]!=null;});});
+      ks.forEach(function(k){seen[k]=1;});if(ks.length||gh.length) groups.push({single:x,kids:ks,ghosts:gh});
+    });
+    groups=groups.filter(function(g){if(g.ghosts&&g.ghosts.length) g.kids=g.kids.concat(g.ghosts);return g.kids.length;});
     if(depth>=28) groups=[];
     groups.forEach(function(g){
       g.kids.sort(byBirth);
@@ -1341,10 +1391,14 @@ function outlineRows(root){
     var mine=elbow&&!elbow.last?[{x:elbow.x,st:elbow.st}]:[];
     groups.forEach(function(g,j){
       var later=groups.slice(j+1).map(function(q){return {x:q.tx,st:q.st};});
-      g.kids.forEach(function(c,ci){walk(c,depth+1,pass.concat(mine,later),{x:g.tx,st:g.st,last:ci===g.kids.length-1});});
+      g.kids.forEach(function(c,ci){
+        var el={x:g.tx,st:g.st,last:ci===g.kids.length-1},ps=pass.concat(mine,later);
+        if(isGhost(g,c)) rows.push({ids:[c],ghost:true,depth:depth+1,pass:ps,elbow:el,rl:{},groups:[]});
+        else walk(c,depth+1,ps,el);
+      });
     });
   }
-  walk(root,0,[],null);
+  TPLACED={};walk(root,0,[],null);TPLACED=null;
   return rows;
 }
 function outlineRowHTML(r,root,placed,pdf){
@@ -1378,13 +1432,13 @@ function outlineRowHTML(r,root,placed,pdf){
   });
   h+=r.ids.map(function(id,i){
     var ring=i<r.ids.length-1?'<span class="oring">⚭'+(r.rl[i]?'<small>'+r.rl[i]+'</small>':'')+'</span>':'';
-    return tcard(P(id),id===root,placed,pdf)+ring;
+    return tcard(P(id),id===root,placed,pdf,r.ghost)+ring;
   }).join('');
   return h+'</div>';
 }
 function outlineParts(root,pdf){
   var rows=outlineRows(root),placed={};
-  rows.forEach(function(r){(r.ids||[]).forEach(function(id){placed[id]=1;});});
+  rows.forEach(function(r){if(!r.ghost)(r.ids||[]).forEach(function(id){placed[id]=1;});});
   return rows.map(function(r){return outlineRowHTML(r,root,placed,pdf);});
 }
 function currentRoot(){var roots=treeRoots();return ui.treeRoot&&P(ui.treeRoot)?ui.treeRoot:(roots[0]?roots[0].id:data.people[0].id);}
@@ -1403,8 +1457,17 @@ function mirrorTree(L){
 }
 function treeMarkup(root,pdf){
   if(ui.treeLayout==='outline') return '<div class="ftree otree'+(ui.calMode==='heb'?' rtl':'')+'">'+outlineParts(root,pdf).join('')+'</div>';
+  TPLACED={};
   var L=ui.treeLayout==='classic'?layoutFam(root,{},0):layoutPack(root,{},0),placed={},h='';
+  TPLACED=null;
   if(ui.calMode==='heb') mirrorTree(L);
+  var links='';
+  L.items.forEach(function(g){
+    if(g.t!=='card'||!g.ghost) return;
+    var r=L.items.filter(function(x){return x.t==='card'&&!x.ghost&&x.id===g.id;})[0];
+    if(r) links+=linkPath(g,r);
+  });
+  h+=linkSVG(links,L.w,L.h+TPAD+4);
   L.items.forEach(function(it){if(it.t==='card') placed[it.id]=1;});
   L.items.forEach(function(it){
     var y=it.y+TPAD;
@@ -1415,7 +1478,7 @@ function treeMarkup(root,pdf){
   L.items.forEach(function(it){
     var y=it.y+TPAD;
     if(it.t==='ring') h+='<span class="fring'+(it.ended?' ended':'')+'" style="left:'+it.x+'px;top:'+y+'px" title="'+esc(it.title)+'">⚭'+(it.label?'<small>'+it.label+'</small>':'')+'</span>';
-    else if(it.t==='card') h+='<div class="fcell" style="left:'+it.x+'px;top:'+y+'px">'+tcard(P(it.id),it.id===root,placed,pdf)+'</div>';
+    else if(it.t==='card') h+='<div class="fcell" style="left:'+it.x+'px;top:'+y+'px">'+tcard(P(it.id),it.id===root,placed,pdf,it.ghost)+'</div>';
     else if(it.t==='chip'&&!(pdf&&it.open)) h+='<button class="tchip'+(it.open?' open':'')+'" data-act="branch" data-k="'+esc(it.k)+'" style="left:'+it.x+'px;top:'+y+'px" title="'+(it.open?'Hide these children':'Show these children')+'">'+(it.open?'−':'+ '+it.n+(it.n===1?' child':' children'))+'</button>';
   });
   return '<div class="ftree" style="width:'+Math.ceil(L.w)+'px;height:'+Math.ceil(L.h+TPAD+4)+'px">'+h+'</div>';
@@ -2406,6 +2469,10 @@ document.addEventListener('click',function(e){
     case 'day':ui.sel=+t.dataset.abs;render();var dp=$('.day-panel');if(dp&&window.innerWidth<980) dp.scrollIntoView({behavior:'smooth',block:'start'});break;
     case 'yday':ui.sel=+t.dataset.abs;gotoMonthOf(ui.sel);ui.calSpan='month';lsSet('fl-calspan','month');render();window.scrollTo(0,0);break;
     case 'open':openPerson(pid);break;
+    case 'goto':
+      var real=$$('.ftree .tcard').filter(function(c){return c.dataset.pid===pid&&!c.classList.contains('ghost');})[0];
+      if(real){real.scrollIntoView({behavior:'smooth',block:'center',inline:'center'});real.classList.add('flash');setTimeout(function(){real.classList.remove('flash');},1800);}
+      break;
     case 'show-tree':ui.treeRoot=topAncestor(pid);ui.view='tree';lsSet('fl-view','tree');drawer=null;renderAll();window.scrollTo(0,0);break;
     case 'root':ui.treeRoot=pid;ui.zoomFit=true;render();break;
     case 'branch':
