@@ -1081,10 +1081,29 @@ function roundPath(pts,R){
    runs in the gap beside it, crosses in the gap just above the real card's row, and comes down into
    the real card's side near its top. So it never meets the line from the parents or a marriage line. */
 var LINKY=22;
-function linkPath(g,r){
-  var gt=g.y+TPAD,rt=r.y+TPAD,left=(r.x+TW/2)<(g.x+TW/2);
-  var xa=left?g.x:g.x+TW,xv=left?g.x-11:g.x+TW+11,ya=gt+LINKY;
-  var xb=left?r.x+TW:r.x,xr=left?r.x+TW+11:r.x-11,yb=rt+LINKY,yh=rt-10;
+function linkPath(g,r,all){
+  var gt=g.y+TPAD,rt=r.y+TPAD,ya=gt+LINKY,yb=rt+LINKY,yh=rt-10,toLeft=(r.x+TW/2)<(g.x+TW/2);
+  /* cards whose rows the vertical part [y0,y1] passes through */
+  function blockers(y0,y1,skip){
+    var lo=Math.min(y0,y1),hi=Math.max(y0,y1);
+    return all.filter(function(c){return c!==skip&&c.y+TPAD<hi&&c.y+TPAD+TH>lo;}).map(function(c){return [c.x,c.x+TW];});
+  }
+  /* The middle of the open strip beside a card's side (side -1 = left, +1 = right): only within the gap to
+     its neighbour in its own row, and clear of every card in the other rows the line passes. */
+  function strip(card,side,y0,y1){
+    var edge=side<0?card.x:card.x+TW,far=edge+side*70,yRow=card.y+TPAD+LINKY;
+    all.forEach(function(c){if(c===card||!(c.y+TPAD<=yRow&&c.y+TPAD+TH>=yRow)) return;var e=side<0?c.x+TW:c.x;if(side<0?e<=edge+0.5&&e>far:e>=edge-0.5&&e<far) far=e;});
+    var lo=Math.min(edge,far),hi=Math.max(edge,far),free=[[lo,hi]];
+    blockers(y0,y1,card).forEach(function(b){
+      free=[].concat.apply([],free.map(function(iv){if(b[1]<=iv[0]||b[0]>=iv[1]) return [iv];var out=[];if(b[0]>iv[0]) out.push([iv[0],b[0]]);if(b[1]<iv[1]) out.push([b[1],iv[1]]);return out;}));
+    });
+    free=free.filter(function(iv){return iv[1]-iv[0]>=4;}).sort(function(a,b){return side<0?b[1]-a[1]:a[0]-b[0];});
+    return free.length?{x:(free[0][0]+free[0][1])/2,ok:true}:{x:(lo+hi)/2,ok:false};
+  }
+  var sa=toLeft?-1:1,va=strip(g,sa,ya,yh);
+  if(!va.ok){var vb=strip(g,-sa,ya,yh);if(vb.ok){sa=-sa;va=vb;}}
+  var xa=sa<0?g.x:g.x+TW,xv=va.x;
+  var sr=xv<r.x+TW/2?-1:1,xb=sr<0?r.x:r.x+TW,xr=strip(r,sr,yh,yb).x;
   return '<path d="'+roundPath([[xa,ya],[xv,ya],[xv,yh],[xr,yh],[xr,yb],[xb,yb]],9)+'"/>';
 }
 function linkSVG(paths,w,h){return paths?'<svg class="flink" width="'+Math.ceil(w)+'" height="'+Math.ceil(h)+'" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none" fill="none" stroke="#8C7AB5" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round">'+paths+'</svg>':'';}
@@ -1508,7 +1527,7 @@ function treeMarkup(root,pdf){
   L.items.forEach(function(g){
     if(g.t!=='card'||!g.ghost) return;
     var r=L.items.filter(function(x){return x.t==='card'&&!x.ghost&&x.id===g.id;})[0];
-    if(r) links+=linkPath(g,r);
+    if(r) links+=linkPath(g,r,L.items.filter(function(x){return x.t==='card';}));
   });
   h+=linkSVG(links,L.w,L.h+TPAD+4);
   L.items.forEach(function(it){if(it.t==='card') placed[it.id]=1;});
