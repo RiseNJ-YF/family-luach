@@ -3,7 +3,8 @@
    tree's other editors may only add viewers (a new account, or an existing one not yet in this tree):
      add    — create a new account with access to this tree
      grant  — give an existing account access to this tree (or change its role here)
-     branch — limit a viewer to one person's branch of this tree (person: '' = the whole tree)
+     branch — limit a viewer to one person's branch of this tree (person: '' = the whole tree); an editor
+              may do this only for viewers they added themselves. add/grant also accept "person".
      reset  — set a new password (anyone may change their own)
      remove — take away access to this tree (an account left with no tree at all is deleted) */
 const { setJSON, K, hashPw, keyOf, setSession, users, current, roleIn, treeList, members, query, migrate, send, body, wrap, validNew } = require('./_lib');
@@ -30,14 +31,19 @@ module.exports = wrap(async (req, res) => {
     const addViewer = b.action === 'add' && role === 'viewer';
     const grantViewer = b.action === 'grant' && role === 'viewer' && (!target || (!target.owner && !(target.trees || {})[id]));
     if (target && b.action === 'grant' && (target.owner || (target.trees || {})[id])) return send(res, 403, { error: target.name + ' can already open this tree. Only the site owner can change their access.' });
-    if (!(selfReset || addViewer || grantViewer)) return send(res, 403, { error: 'Editors can add viewers. Only the site owner can add editors, change roles, set other people’s passwords or remove people.' });
+    /* the branch of a viewer this editor added themselves (the owner's own choices stay the owner's) */
+    const ownViewer = b.action === 'branch' && target && (target.trees || {})[id] === 'viewer' && (target.by || {})[id] === me.key;
+    if (!(selfReset || addViewer || grantViewer || ownViewer)) return send(res, 403, { error: 'Editors can add viewers, and choose which part of the family the viewers they added can see. Only the site owner can add editors, change roles, set other people’s passwords or remove people.' });
   }
   let msg;
   if (b.action === 'add') {
     const bad = validNew(b.name, b.password);
     if (bad) return send(res, 400, { error: bad });
     if (target) return send(res, 400, { error: 'There’s already an account called “' + String(b.name).trim() + '”. To give it access, use “Give an existing user access”.' });
-    list.push({ name: String(b.name).trim(), key, trees: { [id]: role }, ver: 1, ...hashPw(String(b.password)) });
+    const nu = { name: String(b.name).trim(), key, trees: { [id]: role }, ver: 1, ...hashPw(String(b.password)) };
+    if (!me.owner) nu.by = { [id]: me.key };
+    if (role === 'viewer' && b.person) nu.branch = { [id]: String(b.person) };
+    list.push(nu);
     msg = String(b.name).trim() + ' can now sign in as ' + (role === 'editor' ? 'an editor' : 'a viewer') + ' of this tree.';
   } else if (b.action === 'grant') {
     if (!target) return send(res, 404, { error: 'There’s no account called “' + String(b.name || '').trim() + '”. Check the spelling, or add them as a new person.' });
@@ -47,6 +53,8 @@ module.exports = wrap(async (req, res) => {
     const had = target.trees[id];
     target.trees[id] = role;
     if (role === 'editor' && target.branch) delete target.branch[id];
+    if (!had && !me.owner) { target.by = target.by || {}; target.by[id] = me.key; }
+    if (role === 'viewer' && b.person && !had) { target.branch = target.branch || {}; target.branch[id] = String(b.person); }
     msg = had ? target.name + ' is now ' + (role === 'editor' ? 'an editor' : 'a viewer') + ' of this tree.' : target.name + ' can now open this tree as ' + (role === 'editor' ? 'an editor.' : 'a viewer.');
   } else if (b.action === 'branch') {
     if (!target || (target.trees || {})[id] !== 'viewer') return send(res, 400, { error: 'Only a viewer of this tree can be limited to one branch.' });
@@ -66,6 +74,7 @@ module.exports = wrap(async (req, res) => {
     if (target.key === me.key) return send(res, 400, { error: 'You can’t remove yourself.' });
     delete target.trees[id];
     if (target.branch) delete target.branch[id];
+    if (target.by) delete target.by[id];
     if (!Object.keys(target.trees).length && !target.owner) {
       list = list.filter((u) => u.key !== key);
       msg = target.name + ' can no longer sign in (they had no other family tree).';

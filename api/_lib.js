@@ -116,7 +116,7 @@ async function meInfo(u) { return { name: u.name, owner: !!u.owner, trees: await
 function query(req) { return new URL(req.url || '/', 'http://x').searchParams; }
 /* Members of one tree, for its editors. */
 function members(list, id, me) {
-  return list.filter((u) => (u.trees || {})[id] || u.owner).map((u) => ({ name: u.name, role: u.owner ? 'owner' : u.trees[id], branch: (!u.owner && u.trees[id] === 'viewer' && (u.branch || {})[id]) || '', me: !!me && u.key === me.key }));
+  return list.filter((u) => (u.trees || {})[id] || u.owner).map((u) => ({ name: u.name, role: u.owner ? 'owner' : u.trees[id], branch: (!u.owner && u.trees[id] === 'viewer' && (u.branch || {})[id]) || '', mine: !!me && (u.by || {})[id] === me.key, me: !!me && u.key === me.key }));
 }
 function branchOf(u, id) { return u && !u.owner && (u.trees || {})[id] === 'viewer' ? (u.branch || {})[id] || '' : ''; }
 /* The part of a family a branch viewer may see: the starting person, their parents, all their
