@@ -250,7 +250,9 @@ button:disabled{cursor:default;opacity:.6}
 .otree.rtl .orow{flex-direction:row-reverse}
 .otree .og{position:absolute;width:0;border-left:1.5px solid var(--line-2)}
 .otree .oh{position:absolute;top:50%;height:0;border-top:1.5px solid var(--line-2)}
-.otree .oring{align-self:center;color:var(--c-anniversary);width:30px;flex:none;text-align:center;font-size:15px}
+.otree .oring{align-self:center;color:var(--c-anniversary);width:30px;flex:none;text-align:center;font-size:15px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.otree .oring small{font-size:10px;color:var(--ink-3);font-weight:600}
+.otree .oc{position:absolute;box-sizing:border-box;border:0 solid var(--line-2)}
 .otree .ob{position:absolute;bottom:0;height:0;border-top:1.5px solid var(--line-2)}
 .otree .olabel{align-self:center;font-size:13px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px dashed var(--line-2);border-radius:999px;padding:3px 11px;white-space:nowrap}
 .otree .tcard{width:214px;height:auto;min-height:78px;padding:6px 10px}
@@ -1305,60 +1307,78 @@ function layoutPack(id,seen,depth){
   var hh=open.length?TH+VG+maxSubH:groups.length?TH+44:TH;
   return {w:maxX-minX,h:hh,cx:xs[pos[id]]+sh+TW/2,items:items,ct:ct,leaf:n===1&&!groups.length};
 }
-/* Outline: one row per family (the person, then their husband or wife), children indented under
-   them; with more than one marriage, a small label says which marriage the children are from. */
+/* Outline: one row per family (the person, then each husband or wife in marriage order), children
+   indented under them. Each marriage has its own line: it drops from that marriage's ⚭ (or a lone
+   parent's card), turns along under the cards and runs down beside the children, in that marriage's
+   style (1st solid, 2nd dashed, 3rd dotted, 4th double). Every turn is rounded. */
+var OIND=44,OCW=214,ORW=30,ORAD=8;
 function outlineRows(root){
   var rows=[],seen={};
-  function nm(id){var p=P(id);return p.hebFirst||p.first||'';}
-  function walk(id,depth,guides,last){
+  function walk(id,depth,pass,elbow){
     var chain=chainOf(id,seen);chain.forEach(function(x){seen[x]=1;});
-    var pos={};chain.forEach(function(x,i){pos[x]=i;});
+    var ip={};chain.forEach(function(x,i){ip[x]=i;});
     var groups=[];
     data.marriages.forEach(function(m){
-      if(pos[m.a]==null||pos[m.b]==null) return;
-      var g={m:m,i:Math.min(pos[m.a],pos[m.b]),j:Math.max(pos[m.a],pos[m.b])};
-      g.kids=kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;});
+      if(ip[m.a]==null||ip[m.b]==null) return;
+      var g={m:m,kids:kidsOf(m.a).filter(function(k){return !seen[k]&&P(k).parents.indexOf(m.b)>=0;})};
       g.kids.forEach(function(k){seen[k]=1;});groups.push(g);
     });
-    chain.forEach(function(x){var ks=kidsOf(x).filter(function(k){return !seen[k];});ks.forEach(function(k){seen[k]=1;});if(ks.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks});});
-    /* No left/right to respect here, so each marriage's children simply follow in birth order. */
+    chain.forEach(function(x){var ks=kidsOf(x).filter(function(k){return !seen[k];});ks.forEach(function(k){seen[k]=1;});if(ks.length) groups.push({single:x,kids:ks});});
     groups=groups.filter(function(g){return g.kids.length;});
-    groups.forEach(function(g){g.kids.sort(byBirth);});
-    groups.sort(function(a,b){return byBirth(a.kids[0],b.kids[0]);});
     if(depth>=28) groups=[];
-    /* Same order as the tree row: the family member, then each spouse in marriage order, a spouse's own other marriages right after them. */
-    var ids=chain,ip={};ids.forEach(function(x,i){ip[x]=i;});
-    /* Where each family's line starts: the ⚭ just before that husband or wife, or a lone parent's card. */
-    var srcs=groups.map(function(g){return g.single!=null?{card:ip[g.single]}:{ring:Math.max(ip[g.m.a],ip[g.m.b])-1};});
-    rows.push({t:'fam',ids:ids,srcs:srcs,depth:depth,guides:guides,last:last,kids:groups.length>0});
-    var g2=depth>0?guides.concat([!last]):guides,multi=groups.length>1;
-    groups.forEach(function(g,gi){
-      var gl=gi===groups.length-1;g.kids.sort(byBirth);
-      if(multi){
-        var text=g.single!=null?nm(g.single):(g.m.a===id||g.m.b===id)?'with '+nm(g.m.a===id?g.m.b:g.m.a):nm(g.m.a)+' & '+nm(g.m.b);
-        rows.push({t:'label',text:text,depth:depth+1,guides:g2,last:gl,kids:true});
-        var g3=g2.concat([!gl]);
-        g.kids.forEach(function(k,ki){walk(k,depth+2,g3,ki===g.kids.length-1);});
-      } else g.kids.forEach(function(k,ki){walk(k,depth+1,g2,ki===g.kids.length-1);});
+    groups.forEach(function(g){
+      g.kids.sort(byBirth);
+      g.src=g.single!=null?{card:ip[g.single]}:{ring:Math.max(ip[g.m.a],ip[g.m.b])-1};
+      g.st=g.m?marIdx(g.m):0;
+    });
+    /* Families follow their ⚭ from the start of the row, so no two lines cross. */
+    groups.sort(function(p,q){return (p.src.ring!=null?p.src.ring+0.5:p.src.card)-(q.src.ring!=null?q.src.ring+0.5:q.src.card);});
+    var rl={};data.marriages.forEach(function(m){if(ip[m.a]!=null&&ip[m.b]!=null) rl[Math.max(ip[m.a],ip[m.b])-1]=marriageOrd(m);});
+    var n=groups.length,x0=depth*OIND,sp=n>1?Math.min(8,24/(n-1)):0;
+    groups.forEach(function(g,k){g.tx=x0+12+k*sp;});
+    rows.push({ids:chain,depth:depth,pass:pass,elbow:elbow,rl:rl,groups:groups.map(function(g){return {src:g.src,st:g.st,tx:g.tx};})});
+    var mine=elbow&&!elbow.last?[{x:elbow.x,st:elbow.st}]:[];
+    groups.forEach(function(g,j){
+      var later=groups.slice(j+1).map(function(q){return {x:q.tx,st:q.st};});
+      g.kids.forEach(function(c,ci){walk(c,depth+1,pass.concat(mine,later),{x:g.tx,st:g.st,last:ci===g.kids.length-1});});
     });
   }
-  walk(root,0,[],true);
+  walk(root,0,[],null);
   return rows;
 }
 function outlineRowHTML(r,root,placed,pdf){
-  var S=ui.calMode==='heb'?'right':'left',IND=30,x0=r.depth*IND,h='<div class="orow" style="padding-'+S+':'+x0+'px">';
-  r.guides.forEach(function(on,j){if(on) h+='<i class="og" style="'+S+':'+(j*IND+12)+'px;top:0;bottom:0"></i>';});
-  if(r.depth>0){var ex=(r.depth-1)*IND+12;h+='<i class="og" style="'+S+':'+ex+'px;top:0;'+(r.last?'height:50%':'bottom:0')+'"></i><i class="oh" style="'+S+':'+ex+'px;width:'+(x0-ex)+'px"></i>';}
-  /* A family's line starts at its ⚭ (or a lone parent's card), runs along under the cards, and joins
-     the children's line. Outline cards are 214px wide with a 30px ⚭ between them. */
-  if(r.t==='label'&&r.kids) h+='<i class="og" style="'+S+':'+(x0+12)+'px;bottom:0;height:6px"></i>';
-  (r.srcs||[]).forEach(function(src){
-    var x=src.ring!=null?x0+(src.ring+1)*214+src.ring*30+15:x0+src.card*244+12;
-    h+='<i class="og" style="'+S+':'+x+'px;'+(src.ring!=null?'top:calc(50% + 11px);bottom:0':'bottom:0;height:6px')+'"></i>';
-    if(x>x0+12) h+='<i class="ob" style="'+S+':'+(x0+12)+'px;width:'+(x-x0-12+1.5)+'px"></i>';
+  var heb=ui.calMode==='heb',S=heb?'right':'left',O=heb?'left':'right',x0=r.depth*OIND,n=r.groups.length;
+  var pb=n?14+(n-1)*8:6,mid='(50% + '+((6-pb)/2)+'px)';
+  var STY=['solid','dashed','dotted','double'];
+  /* one line piece: pos = {x, top, bottom, height, width}, sides = which borders, round = which corner */
+  function seg(pos,sides,round,st){
+    var css=S+':'+pos.x+'px;';
+    ['top','bottom','height','width'].forEach(function(k){if(pos[k]!=null) css+=k+':'+pos[k]+';';});
+    sides.forEach(function(sd){css+='border-'+sd+'-width:'+(st===3?3:1.5)+'px;';});
+    if(round) css+='border-'+round+'-radius:'+ORAD+'px;';
+    if(st) css+='border-style:'+STY[st]+';';
+    return '<i class="oc" style="'+css+'"></i>';
+  }
+  var h='<div class="orow" style="padding-'+S+':'+x0+'px;padding-bottom:'+pb+'px">';
+  r.pass.forEach(function(l){h+=seg({x:l.x,top:'0',bottom:'0'},[S],null,l.st);});
+  if(r.elbow){
+    var e=r.elbow;
+    if(!e.last) h+=seg({x:e.x,top:'0',bottom:'0'},[S],null,e.st);
+    h+=seg({x:e.x,top:'0',height:'calc'+mid,width:(x0-e.x+1)+'px'},[S,'bottom'],'bottom-'+S,e.st);
+  }
+  r.groups.forEach(function(g,k){
+    var sx=g.src.ring!=null?x0+(g.src.ring+1)*OCW+g.src.ring*ORW+ORW/2:x0+g.src.card*(OCW+ORW)+OCW/2;
+    var bk=8+(n-1-k)*8,labeled=g.src.ring!=null&&r.rl[g.src.ring];
+    var top=g.src.ring!=null?'calc('+mid.slice(1,-1)+' + '+(labeled?19:11)+'px)':'calc(100% - '+pb+'px)';
+    /* down from the ⚭, round the corner, along under the cards … */
+    h+=seg({x:g.tx+ORAD,top:top,bottom:bk+'px',width:(sx-g.tx-ORAD+1.5)+'px'},[O,'bottom'],'bottom-'+O,g.st);
+    /* … and round the corner down towards the children */
+    h+=seg({x:g.tx,bottom:'0',height:(bk+1.5)+'px',width:(ORAD+1)+'px'},[S,'top'],'top-'+S,g.st);
   });
-  if(r.t==='label') h+='<span class="olabel">'+esc(r.text)+'</span>';
-  else h+=r.ids.map(function(id){return tcard(P(id),id===root,placed,pdf);}).join('<span class="oring">⚭</span>');
+  h+=r.ids.map(function(id,i){
+    var ring=i<r.ids.length-1?'<span class="oring">⚭'+(r.rl[i]?'<small>'+r.rl[i]+'</small>':'')+'</span>':'';
+    return tcard(P(id),id===root,placed,pdf)+ring;
+  }).join('');
   return h+'</div>';
 }
 function outlineParts(root,pdf){
