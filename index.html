@@ -225,7 +225,12 @@ button:disabled{cursor:default;opacity:.6}
 .ftree .fl-el.bl{border-left-width:1.5px;border-bottom-width:1.5px}
 .ftree .fl-el.br{border-right-width:1.5px;border-bottom-width:1.5px}
 .ftree .fl-h.mar{border-top:2px solid var(--c-anniversary)}
-.ftree .fl-h.mar.ended{border-top:2px dashed var(--ink-3)}
+.ftree .fl-h.mar.ended{border-top:2px solid var(--ink-3)}
+.ftree .ms1{border-style:dashed!important}
+.ftree .ms2{border-style:dotted!important}
+.ftree .ms3{border-style:double!important}
+.ftree .fl-h.ms3{border-top-width:4px!important}
+.ftree .fl-v.ms3{border-left-width:4px!important}
 .fring{position:absolute;transform:translate(-50%,-50%);background:var(--surface);color:var(--c-anniversary);font-size:15px;line-height:1;padding:2px 4px;border-radius:6px;display:flex;flex-direction:column;align-items:center;gap:1px}
 .fring.ended{color:var(--ink-3)}
 .fring small{font-family:var(--sans);font-size:10px;color:var(--ink-3);font-weight:700}
@@ -998,22 +1003,43 @@ function tcard(p,isRoot,placed,pdf){
 }
 
 /* ---------- Tree layout ----------
-   Each row is a "marriage chain": a person plus everyone joined to them by marriage, including a
-   spouse's other marriages (e.g. shimon ⚭ Rivka ⚭ Yitzchak ⚭ chava). Children drop from the midpoint
-   of the marriage they came from, or from one parent's card when the other parent isn't in the row. */
+   Each row is a "marriage chain": the family member, then each husband or wife in the order they
+   married (a spouse's own other marriages follow right after that spouse). A later marriage's line runs
+   behind the earlier spouses' cards, one line per marriage at its own height and in its own style
+   (1st solid, 2nd dashed, 3rd dotted, 4th double). Children drop from their own marriage's label, in the
+   gap just before that husband or wife, or from one parent's card when the other parent isn't in the row. */
 var TW=172,TH=124,SG=46,SIB=22,GG=44,VG=90,TPAD=24;
 function chainOf(start,seen){
   var inC={};inC[start]=1;
   function others(x){var o=spousesOf(x).map(function(s){return s.pid;}).filter(function(id){return !seen[id]&&!inC[id];});o.forEach(function(id){inC[id]=1;});return o;}
-  function expL(x){var o=others(x),out=[x];o.forEach(function(s){out=expL(s).concat(out);});return out;}
   function expR(x){var o=others(x),out=[x];o.forEach(function(s){out=out.concat(expR(s));});return out;}
-  var sp=others(start),left=[],right=[];
-  /* First spouse to the right (the Hebrew-mode mirror puts it on the left), second to the left, and so on. */
-  sp.forEach(function(s,i){(i%2===0?right:left).push(s);});
+  /* Spouses to the right (the Hebrew-mode mirror puts them on the left), first marriage nearest. */
   var seq=[start];
-  left.forEach(function(s){seq=expL(s).concat(seq);});
-  right.forEach(function(s){seq=seq.concat(expR(s));});
+  others(start).forEach(function(s){seq=seq.concat(expR(s));});
   return seq;
+}
+/* Where a family's children hang from, left to right: a marriage's label sits in the gap just before
+   its husband or wife; a single parent's children hang from that parent's card. */
+function grpPos(g){return g.single!=null?g.i:g.j-0.5;}
+/* The lines down to a later marriage's children take that marriage's line style. */
+function styleLines(items,i0,g){if(!g.m||!g.st) return;for(var k=i0;k<items.length;k++){var it=items[k];if(it.t==='v'||it.t==='h'||it.t==='el') it.cls=(it.cls?it.cls+' ':'')+'ms'+g.st;}}
+/* Which of a person's marriages this is (0 = first), for the line style. */
+function marIdx(m){
+  function ix(pid){var l=spousesOf(pid);if(l.length<2) return -1;for(var i=0;i<l.length;i++) if(l[i].m===m) return i;return -1;}
+  var i=ix(m.a);if(i<0) i=ix(m.b);
+  return Math.max(0,Math.min(3,i));
+}
+/* Marriage lines in a chain: lines that share a gap get their own heights (shortest on top), so a
+   later marriage's line visibly runs past the earlier spouses; its label and children sit in the gap
+   just before its own husband or wife. */
+function marLines(marr,xs){
+  var done=[];
+  marr.slice().sort(function(a,b){return (a.j-a.i)-(b.j-b.i)||a.i-b.i;}).forEach(function(g){
+    var lv=0;while(done.some(function(p){return p.lv===lv&&p.i<g.j&&g.i<p.j;})) lv++;
+    g.lv=lv;done.push(g);
+  });
+  var L=1;marr.forEach(function(g){if(g.lv+1>L) L=g.lv+1;});
+  marr.forEach(function(g){g.ly=TH/2+(g.lv-(L-1)/2)*20;g.gx=(xs[g.j-1]+TW+xs[g.j])/2;g.st=marIdx(g.m);});
 }
 function marriageOrd(m){
   function ix(pid){var l=spousesOf(pid);if(l.length<2) return -1;for(var i=0;i<l.length;i++) if(l[i].m===m) return i;return -1;}
@@ -1037,7 +1063,7 @@ function layoutFam(id,seen,depth){
     ks.forEach(function(k){seen[k]=1;});
     if(ks.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks});
   });
-  groups=groups.filter(function(g){return g.kids.length;}).sort(function(a,b){return (a.i+a.j)-(b.i+b.j);});
+  groups=groups.filter(function(g){return g.kids.length;}).sort(function(a,b){return grpPos(a)-grpPos(b);});
   if(depth>=14) groups=[];
   var bx=0;
   groups.forEach(function(g){
@@ -1052,8 +1078,9 @@ function layoutFam(id,seen,depth){
      groups that would overlap are merged into a cluster centred on the average of their marriages,
      so the parents' row ends up centred over the children as a whole. */
   var n=chain.length,xs=chain.map(function(x,i){return i*(TW+SG);});
+  marLines(marr,xs);
   groups.forEach(function(g){
-    g.ax=g.single!=null?xs[g.i]+TW/2:(xs[g.i]+TW+xs[g.j])/2;
+    g.ax=g.single!=null?xs[g.i]+TW/2:g.gx;
     g.off=g.target-g.L;
   });
   var cl=[];
@@ -1073,8 +1100,8 @@ function layoutFam(id,seen,depth){
   chain.forEach(function(x,i){items.push({t:'card',id:x,x:xs[i]+sh,y:0});});
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
-    items.push({t:'h',x:x1,y:TH/2,w:x2-x1,cls:'mar'+(ended?' ended':'')});
-    items.push({t:'ring',x:(x1+x2)/2,y:TH/2,label:marriageOrd(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
+    items.push({t:'h',x:x1,y:g.ly,w:x2-x1,cls:'mar ms'+g.st+(ended?' ended':'')});
+    items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
   });
   /* Bus heights: the group whose children sit farthest from its own marriage gets the highest line,
      so its horizontal run passes above the other groups' lines instead of crossing them. */
@@ -1082,8 +1109,8 @@ function layoutFam(id,seen,depth){
   var reach=groups.map(function(g,gi){return {gi:gi,d:Math.abs(g.L+g.off-g.ax)};}).sort(function(a,b){return b.d-a.d;});
   reach.forEach(function(r,lvl){groups[r.gi].lvl=lvl;});
   groups.forEach(function(g){
-    var ax=g.ax+sh;
-    var y0=g.single!=null?TH:TH/2+(marriageOrd(g.m)?20:12);
+    var ax=g.ax+sh;var i0=items.length;
+    var y0=g.single!=null?TH:g.ly+(marriageOrd(g.m)?20:12);
     var busY=groups.length===1?TH+VG/2:TH+16+Math.min(g.lvl,4)*13;
     var cxs=g.subs.map(function(s){return g.L+s.ox+s.cx+sh;});
     var left=cxs.filter(function(c){return c<ax-1;}),right=cxs.filter(function(c){return c>ax+1;}),mid=cxs.length-left.length-right.length;
@@ -1095,6 +1122,7 @@ function layoutFam(id,seen,depth){
     left.forEach(function(cx){var r=R(ax-cx);items.push({t:'el',c:'tl',x:cx,y:busY,w:xL-cx,h:childY-busY,r:r});});
     right.forEach(function(cx){var r=R(cx-ax);items.push({t:'el',c:'tr',x:xR,y:busY,w:cx+LW-xR,h:childY-busY,r:r});});
     if(mid&&(left.length||right.length)) items.push({t:'v',x:ax,y:busY,h:childY-busY});
+    styleLines(items,i0,g);
     g.subs.forEach(function(s){
       var ox=g.L+s.ox+sh;
       s.items.forEach(function(it){var c=Object.assign({},it);c.x+=ox;c.y+=childY;items.push(c);});
@@ -1146,11 +1174,12 @@ function layoutPack(id,seen,depth){
     ks.forEach(function(k){seen[k]=1;});
     if(ks.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks});
   });
-  groups=groups.filter(function(g){return g.kids.length;}).sort(function(a,b){return (a.i+a.j)-(b.i+b.j);});
+  groups=groups.filter(function(g){return g.kids.length;}).sort(function(a,b){return grpPos(a)-grpPos(b);});
   if(depth>=14) groups=[];
   var n=chain.length,xs=chain.map(function(x,i){return i*(TW+SG);});
+  marLines(marr,xs);
   groups.forEach(function(g){
-    g.ax=g.single!=null?xs[g.i]+TW/2:(xs[g.i]+TW+xs[g.j])/2;
+    g.ax=g.single!=null?xs[g.i]+TW/2:g.gx;
     g.key=g.m?g.m.id:'s:'+g.single;
     g.shut=mode==='branch'&&!branchOpen(g.key,depth);
     g.kids.sort(byBirth);
@@ -1209,8 +1238,8 @@ function layoutPack(id,seen,depth){
   ctAdd(ct,0,xs[0]+sh,xs[n-1]+TW+sh);
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
-    items.push({t:'h',x:x1,y:TH/2,w:x2-x1,cls:'mar'+(ended?' ended':'')});
-    items.push({t:'ring',x:(x1+x2)/2,y:TH/2,label:marriageOrd(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
+    items.push({t:'h',x:x1,y:g.ly,w:x2-x1,cls:'mar ms'+g.st+(ended?' ended':'')});
+    items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
   });
   var childY=TH+VG,maxSubH=0,LW=1.5;
   groups.forEach(function(g){
@@ -1223,8 +1252,8 @@ function layoutPack(id,seen,depth){
   var reach=open.map(function(g,gi){return {gi:gi,d:Math.abs(g.L+g.target-g.ax)};}).sort(function(a,b){return b.d-a.d;});
   reach.forEach(function(r,lvl){open[r.gi].lvl=lvl;});
   open.forEach(function(g){
-    var ax=g.ax+sh;
-    var y0=g.single!=null?TH:TH/2+(marriageOrd(g.m)?20:12);
+    var ax=g.ax+sh;var i0=items.length;
+    var y0=g.single!=null?TH:g.ly+(marriageOrd(g.m)?20:12);
     var busY=open.length===1?TH+VG/2:TH+16+Math.min(g.lvl,4)*13;
     if(g.rows.length>1){
       /* Wrapped family: the first row hangs from the parents as usual; a line down the side feeds the other rows. */
@@ -1253,6 +1282,7 @@ function layoutPack(id,seen,depth){
       if(mid&&(left.length||right.length)) items.push({t:'v',x:ax,y:busY,h:childY-busY});
       ctAdd(ct,1,Math.min(ax,cxs[0]),Math.max(ax,cxs[cxs.length-1]));
     }
+    styleLines(items,i0,g);
     if(mode==='branch'&&depth>0) items.push({t:'chip',x:ax,y:TH+2,k:g.key,open:true});
     ctPut(ct,g.ct,g.L+sh,2);
     g.subs.forEach(function(x){
@@ -1337,8 +1367,8 @@ function treeMarkup(root,pdf){
   L.items.forEach(function(it){
     var y=it.y+TPAD;
     if(it.t==='h') h+='<i class="fl-h'+(it.cls?' '+it.cls:'')+'" style="left:'+it.x+'px;top:'+y+'px;width:'+it.w+'px"></i>';
-    else if(it.t==='v') h+='<i class="fl-v" style="left:'+it.x+'px;top:'+y+'px;height:'+it.h+'px"></i>';
-    else if(it.t==='el') h+='<i class="fl-el '+it.c+'" style="left:'+it.x+'px;top:'+y+'px;width:'+Math.max(0,it.w)+'px;height:'+it.h+'px;'+{tl:'border-top-left-radius',tr:'border-top-right-radius',bl:'border-bottom-left-radius',br:'border-bottom-right-radius'}[it.c]+':'+it.r+'px"></i>';
+    else if(it.t==='v') h+='<i class="fl-v'+(it.cls?' '+it.cls:'')+'" style="left:'+it.x+'px;top:'+y+'px;height:'+it.h+'px"></i>';
+    else if(it.t==='el') h+='<i class="fl-el '+it.c+(it.cls?' '+it.cls:'')+'" style="left:'+it.x+'px;top:'+y+'px;width:'+Math.max(0,it.w)+'px;height:'+it.h+'px;'+{tl:'border-top-left-radius',tr:'border-top-right-radius',bl:'border-bottom-left-radius',br:'border-bottom-right-radius'}[it.c]+':'+it.r+'px"></i>';
   });
   L.items.forEach(function(it){
     var y=it.y+TPAD;
@@ -1362,7 +1392,7 @@ function viewTree(){
   h+='<div class="seg" role="group" aria-label="Direction"><button data-act="calmode" data-m="greg" aria-pressed="'+(ui.calMode!=='heb')+'" title="Oldest on the left">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+(ui.calMode==='heb')+'" title="Oldest on the right">Hebrew</button></div>';
   h+='<button class="btn sm" data-act="zoom" data-z="-1" aria-label="Zoom out">−</button><span class="btn sm num zoom-pct" id="zoom-pct">'+Math.round(ui.zoom*100)+'%</span><button class="btn sm" data-act="zoom" data-z="1" aria-label="Zoom in">+</button><button class="btn sm" data-act="zoom" data-z="0">Fit</button></div></div>';
   h+='<div class="tree-wrap" id="tree-wrap"><div id="tree-zoom" style="zoom:'+ui.zoom+'">'+treeMarkup(root)+'</div></div>';
-  h+='<p class="note" style="margin-top:8px">Scroll or pinch to zoom, drag to move around, tap anyone for their details. Each marriage is shown, with its children hanging from between that couple.</p>';
+  h+='<p class="note" style="margin-top:8px">Scroll or pinch to zoom, drag to move around, tap anyone for their details. Each marriage is shown, with its children hanging from that marriage’s ⚭. A 2nd marriage’s line is dashed, a 3rd dotted, a 4th double; gray means divorced.</p>';
   return h;
 }
 
