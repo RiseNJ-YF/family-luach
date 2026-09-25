@@ -1,6 +1,6 @@
 /* GET /api/data?tree=ID — one family tree's data, for anyone with access to it.
    PUT /api/data?tree=ID — save it (that tree's editors). "rev" stops two editors overwriting each other. */
-const { getJSON, setJSON, K, current, roleIn, treeList, query, migrate, send, body, wrap, validData } = require('./_lib');
+const { getJSON, setJSON, K, current, roleIn, treeList, branchOf, branchData, query, migrate, send, body, wrap, validData } = require('./_lib');
 
 module.exports = wrap(async (req, res) => {
   await migrate();
@@ -12,7 +12,11 @@ module.exports = wrap(async (req, res) => {
   const role = roleIn(me, id);
   if (!tree || !role) return send(res, 403, { error: 'You don’t have access to that family tree.' });
   const stored = (await getJSON(K.tree(id))) || { rev: 0, data: null };
-  if (req.method === 'GET') return send(res, 200, stored);
+  if (req.method === 'GET') {
+    /* a viewer limited to one branch only ever receives that branch */
+    const pid = branchOf(me, id);
+    return send(res, 200, pid && stored.data ? { rev: stored.rev, data: branchData(stored.data, pid), branch: true } : stored);
+  }
   if (req.method !== 'PUT') return send(res, 405, { error: 'Use GET or PUT.' });
   if (role !== 'editor') return send(res, 403, { error: 'Only editors can save changes.' });
   const b = body(req);

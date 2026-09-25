@@ -2406,6 +2406,8 @@ function acctDo(payload){
 function acctAdd(){acctDo({action:'add',name:$('#ac-user').value.trim(),password:$('#ac-pw').value,role:$('#ac-role').value});}
 function acctGrant(){acctDo({action:'grant',name:$('#ag-user').value.trim(),role:$('#ag-role').value});}
 function acctRole(i){var a=accounts[i];if(a) acctDo({action:'grant',name:a.name,role:a.role==='editor'?'viewer':'editor'});}
+function acctBranch(i,person){var a=accounts[i];if(a) acctDo({action:'branch',name:a.name,person:person});}
+function acctMyPw(){var inp=$('#my-pw');acctDo({action:'reset',name:web.me.name,password:inp?inp.value:''});}
 /* Site owner: new trees and invite links */
 function ownerDo(path,payload,then){
   web.busy=true;render();
@@ -2428,7 +2430,7 @@ function ownerHTML(){
     h+='</div>';
   } else h+='<p class="note">Loading…</p>';
   h+='<div class="row acct-add"><input class="inp" id="nt-name" placeholder="New family name" autocomplete="off"><button class="btn sm primary" data-act="tree-new"'+(web.busy?' disabled':'')+'>Start a new family tree</button></div>';
-  h+='<h4 class="subh">Invite someone to start their own tree</h4><p>Each link can be used once. Whoever opens it names their family and becomes its editor — with a new username, or with their existing one (the new tree is added to their account). They then add their own people.</p>';
+  h+='<h4 class="subh">Invite someone to start their own tree</h4><p>Each link can be used once. Whoever opens it names their family and becomes its editor — with a new username, or with their existing one (the new tree is added to their account). They fill in their family; you give other people access.</p>';
   h+='<div class="row"><button class="btn sm primary" data-act="invite-new"'+(web.busy?' disabled':'')+'>Create an invite link</button></div>';
   var open=(invites||[]).filter(function(i){return !i.used;}),used=(invites||[]).filter(function(i){return i.used;});
   if(open.length){
@@ -2461,13 +2463,26 @@ function acctRemove(i){var a=accounts[i];if(a) acctDo({action:'remove',name:a.na
 function accountsHTML(){
   if(!WEB||!web.me||myRole()!=='editor') return '';
   var ct=curTree();
-  var h='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>Viewers can look at everything in this tree. Editors can also change it and manage this list. Each person has one username and password for every tree they belong to.</p>';
+  /* Only the site owner manages access; other editors see who can open the tree and change their own password. */
+  if(!web.me.owner){
+    var h0='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>Only the site owner can add people, change who can open this tree, or set their passwords.</p>';
+    if(accounts) h0+='<div class="acct-list">'+accounts.map(function(a){return '<div class="acct"><div class="acct-who"><b>'+esc(a.name)+'</b><span class="role '+a.role+'">'+(a.role==='owner'?'Site owner':a.role==='editor'?'Editor':'Viewer')+'</span>'+(a.me?'<span class="note">you</span>':'')+'</div></div>';}).join('')+'</div>';
+    h0+='<h4 class="subh">Your password</h4><div class="row acct-add"><input class="inp" id="my-pw" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-mypw"'+(web.busy?' disabled':'')+'>Change my password</button></div>';
+    if(ui.acctErr) h0+='<p class="err">'+esc(ui.acctErr)+'</p>';
+    return h0;
+  }
+  var h='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>Viewers can look at this tree (or only one branch of it, if you choose below). Editors can also change it. Each person has one username and password for every tree they belong to, and only you, the site owner, manage this list.</p>';
   if(!accounts) return h+'<p class="note">Loading…</p>';
   h+='<div class="acct-list">';
   accounts.forEach(function(a,i){
     h+='<div class="acct"><div class="acct-who"><b>'+esc(a.name)+'</b><span class="role '+a.role+'">'+(a.role==='owner'?'Site owner':a.role==='editor'?'Editor':'Viewer')+'</span>'+(a.me?'<span class="note">you</span>':'')+'</div>';
     h+='<div class="acct-do"><input class="inp" id="rp-'+i+'" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-reset" data-i="'+i+'"'+(web.busy?' disabled':'')+'>'+(a.me?'Change my password':'Set password')+'</button>';
     if(!a.me&&a.role!=='owner') h+='<button class="btn sm ghost" data-act="acct-role" data-i="'+i+'"'+(web.busy?' disabled':'')+'>'+(a.role==='editor'?'Make viewer':'Make editor')+'</button>';
+    if(a.role==='viewer'){
+      /* a viewer can be limited to one person's branch: that person, their parents, everyone below them */
+      var opts=data.people.slice().sort(function(x,y){return primaryText(x).localeCompare(primaryText(y));});
+      h+='<label class="check" title="Limit what this viewer can see">Sees <select class="sel" data-act-change="acct-branch" data-i="'+i+'"'+(web.busy?' disabled':'')+'><option value="">the whole tree</option>'+opts.map(function(p){return '<option value="'+esc(p.id)+'"'+(a.branch===p.id?' selected':'')+'>only the family of '+esc(primaryText(p))+'</option>';}).join('')+'</select></label>';
+    }
     if(ui.rmAsk===i) h+='<span class="confirm">Remove '+esc(a.name)+' from this tree? <button class="btn sm danger" data-act="acct-remove" data-i="'+i+'">Remove</button><button class="btn sm ghost" data-act="acct-rm-no">Keep</button></span>';
     else if(!a.me&&a.role!=='owner') h+='<button class="btn sm ghost" data-act="acct-rm-ask" data-i="'+i+'">Remove</button>';
     h+='</div></div>';
@@ -2481,7 +2496,7 @@ function accountsHTML(){
 function webFooter(){
   if(!WEB) return '';
   var bits=['<span>Family Luach</span>'];
-  if(web.state==='ready'&&web.me) bits.push('<span>Signed in as '+esc(web.me.name)+' · '+(web.me.owner?'Site owner':myRole()==='editor'?'Editor':'Viewer')+'</span>','<button class="linkbtn" data-act="sign-out">Sign out</button>');
+  if(web.state==='ready'&&web.me) bits.push('<span>Signed in as '+esc(web.me.name)+' · '+(web.me.owner?'Site owner':myRole()==='editor'?'Editor':(curTree()&&curTree().branch?'Viewer (one branch of the family)':'Viewer'))+'</span>','<button class="linkbtn" data-act="sign-out">Sign out</button>');
   return '<footer class="webfoot">'+bits.join('<span class="sep">·</span>')+'</footer>';
 }
 function gateHTML(){
@@ -2489,7 +2504,7 @@ function gateHTML(){
   if(web.state==='loading') h+='<p class="note">Loading the family calendar…</p>';
   else if(web.state==='error') h+='<h1>Family Luach</h1><p>'+esc(web.err)+'</p><div><button class="btn sm" data-act="reload">Try again</button></div>';
   else if(web.state==='invite'){
-    h+='<h1>Start your family tree</h1><p>You’ve been invited to start your own family tree here. You’ll be its editor, and you can add the people in your family and give them their own sign-in.</p><form id="invite" class="form" style="gap:12px">';
+    h+='<h1>Start your family tree</h1><p>You’ve been invited to start your own family tree here. You’ll be its editor and can add the people in your family. To let other people open it, ask the site owner.</p><form id="invite" class="form" style="gap:12px">';
     h+='<div class="field"><label for="iv-family">Family name</label><input class="inp" id="iv-family" placeholder="e.g. The Cohen Family" autocomplete="off"></div>';
     if(web.me) h+='<p class="note">You’re signed in as <b>'+esc(web.me.name)+'</b> — the new tree will be added to your account.</p>';
     else{
@@ -2621,6 +2636,7 @@ document.addEventListener('click',function(e){
     case 'setup-cancel':web.state='empty';web.err='';render();break;
     case 'acct-add':acctAdd();break;
     case 'acct-grant':acctGrant();break;
+    case 'acct-mypw':acctMyPw();break;
     case 'acct-role':acctRole(+t.dataset.i);break;
     case 'tree-new':newTree();break;
     case 'tree-open':switchTree(t.dataset.id);break;
@@ -2763,6 +2779,7 @@ document.addEventListener('change',function(e){
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;ui.zoomFit=true;render();}
   if(a==='tree-switch'){switchTree(t.value);return;}
+  if(a==='acct-branch'){acctBranch(+t.dataset.i,t.value);return;}
   if(a==='tree-layout'){ui.treeLayout=t.value;lsSet('fl-tlayout',t.value);ui.zoomFit=true;render();}
   if(a==='sort'){ui.sort=t.value;lsSet('fl-sort',ui.sort);$('#people-grid').innerHTML=peopleCards();}
 });

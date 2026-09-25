@@ -1,9 +1,9 @@
-/* GET /api/users?tree=ID — who can open this tree (its editors only).
-   POST /api/users?tree=ID — {action, name, password, role}, for this tree's editors:
+/* GET /api/users?tree=ID — who can open this tree (its editors, read-only; the site owner).
+   POST /api/users?tree=ID — {action, name, password, role, person}. Only the site owner manages access:
      add    — create a new account with access to this tree
      grant  — give an existing account access to this tree (or change its role here)
-     reset  — set a new password (for accounts that only belong to trees you edit, or yourself;
-              the site owner can reset anyone)
+     branch — limit a viewer to one person's branch of this tree (person: '' = the whole tree)
+     reset  — set a new password (anyone may change their own)
      remove — take away access to this tree (an account left with no tree at all is deleted) */
 const { setJSON, K, hashPw, keyOf, setSession, users, current, roleIn, treeList, members, query, migrate, send, body, wrap, validNew } = require('./_lib');
 
@@ -22,6 +22,7 @@ module.exports = wrap(async (req, res) => {
   const key = keyOf(b.name);
   const target = list.find((u) => u.key === key);
   const role = b.role === 'editor' ? 'editor' : 'viewer';
+  if (!me.owner && !(b.action === 'reset' && target && target.key === me.key)) return send(res, 403, { error: 'Only the site owner manages who can open a family tree.' });
   let msg;
   if (b.action === 'add') {
     const bad = validNew(b.name, b.password);
@@ -36,7 +37,13 @@ module.exports = wrap(async (req, res) => {
     target.trees = target.trees || {};
     const had = target.trees[id];
     target.trees[id] = role;
+    if (role === 'editor' && target.branch) delete target.branch[id];
     msg = had ? target.name + ' is now ' + (role === 'editor' ? 'an editor' : 'a viewer') + ' of this tree.' : target.name + ' can now open this tree as ' + (role === 'editor' ? 'an editor.' : 'a viewer.');
+  } else if (b.action === 'branch') {
+    if (!target || (target.trees || {})[id] !== 'viewer') return send(res, 400, { error: 'Only a viewer of this tree can be limited to one branch.' });
+    target.branch = target.branch || {};
+    if (b.person) target.branch[id] = String(b.person); else delete target.branch[id];
+    msg = b.person ? target.name + ' now sees only that part of the family.' : target.name + ' now sees the whole tree.';
   } else if (b.action === 'reset') {
     if (!target) return send(res, 404, { error: 'That person isn’t on the list.' });
     const mine = target.key === me.key;
@@ -49,6 +56,7 @@ module.exports = wrap(async (req, res) => {
     if (!target || !(target.trees || {})[id]) return send(res, 404, { error: 'That person doesn’t have access to this tree.' });
     if (target.key === me.key) return send(res, 400, { error: 'You can’t remove yourself.' });
     delete target.trees[id];
+    if (target.branch) delete target.branch[id];
     if (!Object.keys(target.trees).length && !target.owner) {
       list = list.filter((u) => u.key !== key);
       msg = target.name + ' can no longer sign in (they had no other family tree).';

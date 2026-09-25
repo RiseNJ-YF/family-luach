@@ -4,7 +4,10 @@
    Keys: fl:users (accounts), fl:trees (list of family trees), fl:tree:<id> ({rev, data} of one tree),
    fl:invites (links for starting a new tree), fl:secret (signs sign-in cookies).
    One login per person; each account has a role per tree ({trees: {<id>: 'editor'|'viewer'}}).
-   The site owner (owner: true) can open and edit every tree, and is the only one who makes invites. */
+   The site owner (owner: true) can open and edit every tree, and is the only one who manages who can open
+   a tree (and in what role), sets other people's passwords, and makes invites.
+   A viewer can be limited to one branch of a tree ({branch: {<id>: <personId>}}): the server then only
+   sends that person, their parents, everyone below them and their husbands/wives. */
 const crypto = require('crypto');
 
 let redis = null;
@@ -107,13 +110,46 @@ function roleIn(u, id) { return u ? (u.owner ? 'editor' : (u.trees || {})[id] ||
 async function treeList() { return (await getJSON(K.trees)) || []; }
 async function treesFor(u) {
   const all = await treeList();
-  return all.filter((t) => roleIn(u, t.id)).map((t) => ({ id: t.id, name: t.name, role: roleIn(u, t.id) }));
+  return all.filter((t) => roleIn(u, t.id)).map((t) => ({ id: t.id, name: t.name, role: roleIn(u, t.id), branch: !!branchOf(u, t.id) }));
 }
 async function meInfo(u) { return { name: u.name, owner: !!u.owner, trees: await treesFor(u) }; }
 function query(req) { return new URL(req.url || '/', 'http://x').searchParams; }
 /* Members of one tree, for its editors. */
 function members(list, id, me) {
-  return list.filter((u) => (u.trees || {})[id] || u.owner).map((u) => ({ name: u.name, role: u.owner ? 'owner' : u.trees[id], me: !!me && u.key === me.key }));
+  return list.filter((u) => (u.trees || {})[id] || u.owner).map((u) => ({ name: u.name, role: u.owner ? 'owner' : u.trees[id], branch: (!u.owner && u.trees[id] === 'viewer' && (u.branch || {})[id]) || '', me: !!me && u.key === me.key }));
+}
+function branchOf(u, id) { return u && !u.owner && (u.trees || {})[id] === 'viewer' ? (u.branch || {})[id] || '' : ''; }
+/* The part of a family a branch viewer may see: the starting person, their parents, all their
+   descendants, and the husbands/wives of all of those. Anyone else is left out entirely; a kept person
+   whose parent is left out keeps that parent's Hebrew first name in their own record, so their name
+   (בן/בת …) still reads right. */
+function branchData(d, pid) {
+  const byId = {};
+  (d.people || []).forEach((p) => { byId[p.id] = p; });
+  if (!byId[pid]) return { meta: d.meta, people: [], marriages: [] };
+  const kids = {};
+  d.people.forEach((p) => (p.parents || []).forEach((q) => { (kids[q] = kids[q] || []).push(p.id); }));
+  const keep = new Set([pid]), line = [pid];
+  for (let i = 0; i < line.length; i++) (kids[line[i]] || []).forEach((k) => { if (!keep.has(k)) { keep.add(k); line.push(k); } });
+  const blood = new Set(keep);
+  (d.marriages || []).forEach((m) => {
+    if (blood.has(m.a) && m.b && byId[m.b]) keep.add(m.b);
+    if (m.b && blood.has(m.b) && byId[m.a]) keep.add(m.a);
+  });
+  (byId[pid].parents || []).forEach((q) => { if (byId[q]) keep.add(q); });
+  const people = d.people.filter((p) => keep.has(p.id)).map((p) => {
+    const c = Object.assign({}, p);
+    (p.parents || []).forEach((q) => {
+      if (keep.has(q) || !byId[q]) return;
+      const par = byId[q];
+      if (par.gender === 'm' && !c.fatherHeb) c.fatherHeb = par.hebFirst || '';
+      if (par.gender === 'f' && !c.motherHeb) c.motherHeb = par.hebFirst || '';
+    });
+    c.parents = (p.parents || []).filter((q) => keep.has(q));
+    return c;
+  });
+  const marriages = (d.marriages || []).filter((m) => keep.has(m.a) && (!m.b || keep.has(m.b) || !byId[m.b]));
+  return { meta: d.meta, people, marriages };
 }
 /* One-time move from the single-family version: the family becomes tree "main", everyone keeps their
    role there, and the first editor becomes the site owner. The old fl:data key is kept as a backup. */
@@ -163,4 +199,4 @@ function validNew(name, pw) {
   return null;
 }
 
-module.exports = { cmd, getJSON, setJSON, K, newId, hashPw, checkPw, keyOf, setSession, clearSession, users, current, roleIn, treeList, treesFor, meInfo, query, members, migrate, send, body, wrap, validData, validNew };
+module.exports = { cmd, getJSON, setJSON, K, newId, hashPw, checkPw, keyOf, setSession, clearSession, users, current, roleIn, treeList, treesFor, meInfo, query, members, branchOf, branchData, migrate, send, body, wrap, validData, validNew };
