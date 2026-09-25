@@ -1272,7 +1272,8 @@ function layoutPack(id,seen,depth){
       } else items.push({t:'v',x:ax,y:y0,h:busY+LW-y0});
       /* start the long run just after the first child's rounded corner, so that corner stays round */
       var f0=ax<c0-1?from:c0+Math.min(RR,(childY-busY)/2);
-      items.push({t:'el',c:'tr',x:f0,y:busY,w:tx+LW-f0,h:lastBus-RR-busY+LW,r:RR});
+      /* one continuous line: along the first row, past its end, down to the next row */
+      items.push({t:'el',c:'tr',x:f0,y:busY,w:tx+LW-f0,h:rowY[1]-RR-busY+LW,r:RR});
       g.rows.forEach(function(r,ri){
         var top=childY+r.oy,cx=r.map(function(x){return g.L+x.ox+x.cx+sh;});
         if(ri===0){cx.forEach(function(c){var rc=Math.min(RR,(top-busY)/2);items.push({t:'el',c:'tl',x:c,y:busY,w:rc+LW,h:top-busY,r:rc});});return;}
@@ -1283,6 +1284,8 @@ function layoutPack(id,seen,depth){
         items.push({t:'el',c:'tl',x:xs,y:yU,w:ru+LW,h:hh+LW,r:ru});
         items.push({t:'el',c:'bl',x:xs,y:yU+hh,w:ru+LW,h:hh+LW,r:ru});
         cx.forEach(function(c){var rc=Math.min(RR,(top-yL)/2);items.push({t:'el',c:'tr',x:xs+ru,y:yL,w:c+LW-xs-ru,h:top-yL,r:rc});});
+        /* … and on past this row's youngest child, down to the row after it */
+        if(ri<g.rows.length-1) items.push({t:'el',c:'tr',x:cx[cx.length-1],y:yL,w:tx+LW-cx[cx.length-1],h:rowY[ri+1]-RR-yL+LW,r:RR});
       });
       ctAdd(ct,1,from,tx+2);
     } else {
