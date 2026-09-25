@@ -2465,8 +2465,10 @@ function accountsHTML(){
   var ct=curTree();
   /* Only the site owner manages access; other editors see who can open the tree and change their own password. */
   if(!web.me.owner){
-    var h0='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>Only the site owner can add people, change who can open this tree, or set their passwords.</p>';
+    var h0='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>You can let more people <b>view</b> this tree. Only the site owner can add editors, change someone’s role, set other people’s passwords, or remove people.</p>';
     if(accounts) h0+='<div class="acct-list">'+accounts.map(function(a){return '<div class="acct"><div class="acct-who"><b>'+esc(a.name)+'</b><span class="role '+a.role+'">'+(a.role==='owner'?'Site owner':a.role==='editor'?'Editor':'Viewer')+'</span>'+(a.me?'<span class="note">you</span>':'')+'</div></div>';}).join('')+'</div>';
+    h0+='<p style="margin:12px 0 4px"><b>Add a new viewer</b></p><div class="row acct-add"><input class="inp" id="ac-user" placeholder="Username" autocomplete="off"><input class="inp" id="ac-pw" type="password" placeholder="Password" autocomplete="new-password"><input type="hidden" id="ac-role" value="viewer"><button class="btn sm primary" data-act="acct-add"'+(web.busy?' disabled':'')+'>Add viewer</button></div>';
+    h0+='<p style="margin:12px 0 4px"><b>Let an existing user view this tree</b> <span class="note">— someone who already signs in to another family tree here</span></p><div class="row acct-add"><input class="inp" id="ag-user" placeholder="Their username" autocomplete="off"><input type="hidden" id="ag-role" value="viewer"><button class="btn sm primary" data-act="acct-grant"'+(web.busy?' disabled':'')+'>Give viewing access</button></div>';
     h0+='<h4 class="subh">Your password</h4><div class="row acct-add"><input class="inp" id="my-pw" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-mypw"'+(web.busy?' disabled':'')+'>Change my password</button></div>';
     if(ui.acctErr) h0+='<p class="err">'+esc(ui.acctErr)+'</p>';
     return h0;

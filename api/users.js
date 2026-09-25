@@ -1,5 +1,6 @@
 /* GET /api/users?tree=ID — who can open this tree (its editors, read-only; the site owner).
-   POST /api/users?tree=ID — {action, name, password, role, person}. Only the site owner manages access:
+   POST /api/users?tree=ID — {action, name, password, role, person}. The site owner manages access; the
+   tree's other editors may only add viewers (a new account, or an existing one not yet in this tree):
      add    — create a new account with access to this tree
      grant  — give an existing account access to this tree (or change its role here)
      branch — limit a viewer to one person's branch of this tree (person: '' = the whole tree)
@@ -22,7 +23,15 @@ module.exports = wrap(async (req, res) => {
   const key = keyOf(b.name);
   const target = list.find((u) => u.key === key);
   const role = b.role === 'editor' ? 'editor' : 'viewer';
-  if (!me.owner && !(b.action === 'reset' && target && target.key === me.key)) return send(res, 403, { error: 'Only the site owner manages who can open a family tree.' });
+  /* Editors may only add viewers: a new account, or an existing account that can't open this tree yet.
+     Everything else (editors, role changes, other people's passwords, removing) is the site owner's. */
+  if (!me.owner) {
+    const selfReset = b.action === 'reset' && target && target.key === me.key;
+    const addViewer = b.action === 'add' && role === 'viewer';
+    const grantViewer = b.action === 'grant' && role === 'viewer' && (!target || (!target.owner && !(target.trees || {})[id]));
+    if (target && b.action === 'grant' && (target.owner || (target.trees || {})[id])) return send(res, 403, { error: target.name + ' can already open this tree. Only the site owner can change their access.' });
+    if (!(selfReset || addViewer || grantViewer)) return send(res, 403, { error: 'Editors can add viewers. Only the site owner can add editors, change roles, set other people’s passwords or remove people.' });
+  }
   let msg;
   if (b.action === 'add') {
     const bad = validNew(b.name, b.password);
