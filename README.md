@@ -8,16 +8,21 @@ and Hebrew calendars, with printable PDFs (including a vector wall calendar for 
 Hosted on **Vercel** (free plan), with the family data and accounts in a private Redis database
 connected through Vercel's Storage tab.
 
-## Signing in
+## Family trees and signing in
 
-Everyone signs in with a **username and password**:
+One site can hold several family trees. Everyone has **one username and password**, and a role in
+each tree they can open:
 
-- **Viewer** — sees the calendar, family tree and people, and can export PDFs.
-- **Editor** — can also add and change people, save, and manage who can sign in.
+- **Viewer** — sees that tree's calendar, family tree and people, and can export PDFs.
+- **Editor** — can also change that tree and manage who can open it.
+- **Site owner** (the first editor) — can open and edit every tree, start new trees, and create
+  **invite links**. An invite link works once: whoever opens it names their family, becomes the editor
+  of a new, empty tree, and adds their own people.
 
-Editors add people, set passwords and remove people in **Settings → People who can sign in**.
-Forgot a password? An editor sets a new one. Removing someone or resetting their password signs them
-out everywhere immediately.
+Editors manage access in **Settings → People who can open this tree**: add a new person, give an
+existing user access, switch someone between viewer and editor, set passwords, or remove them.
+Someone removed from their only tree can no longer sign in. People who belong to more than one tree
+switch between them with the menu at the top of the page.
 
 ## First-time setup (once)
 
@@ -31,10 +36,13 @@ out everywhere immediately.
 - `index.html` — the app. It contains only a made-up example family; real data never goes into the
   repository.
 - `api/` — small serverless functions: sign-in (`login`, `logout`, `state`), first-time `setup`,
-  the family `data` (anyone signed in can read; editors save), and `users` (editors manage accounts).
+  a tree's `data` (its members read; its editors save), `users` (a tree's editors manage access), and
+  `trees` and `invites` (site owner).
 - Passwords are stored as scrypt hashes. Sign-in uses a signed, HttpOnly cookie that is re-checked
   against the account list on every request. Ten wrong passwords lock a username for 15 minutes.
-- Data lives in the Redis database (`fl:data`, `fl:users`); nothing personal is in this repository.
+- Data lives in the Redis database (`fl:trees`, `fl:tree:<id>`, `fl:users`, `fl:invites`); nothing
+  personal is in this repository. `fl:data` holds the single-family data from before trees existed and
+  is kept as a backup.
 
 ## Changing the app
 

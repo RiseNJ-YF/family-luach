@@ -1,8 +1,9 @@
 /* POST /api/login — sign in with username + password. Ten wrong tries lock that username for 15 minutes. */
-const { cmd, checkPw, keyOf, setSession, users, send, body, wrap } = require('./_lib');
+const { cmd, checkPw, keyOf, setSession, users, meInfo, migrate, send, body, wrap } = require('./_lib');
 
 module.exports = wrap(async (req, res) => {
   if (req.method !== 'POST') return send(res, 405, { error: 'Use POST.' });
+  await migrate();
   const b = body(req);
   const key = keyOf(b.name);
   const failKey = 'fl:fail:' + key;
@@ -15,5 +16,5 @@ module.exports = wrap(async (req, res) => {
   }
   await cmd('DEL', failKey);
   await setSession(res, u, !!b.remember);
-  send(res, 200, { me: { name: u.name, role: u.role } });
+  send(res, 200, { me: await meInfo(u) });
 });

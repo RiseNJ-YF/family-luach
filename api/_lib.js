@@ -1,7 +1,10 @@
 /* Shared server code for the Family Luach API (Vercel serverless functions).
    Files starting with "_" are not exposed as routes.
    Storage: a Redis database connected through Vercel's Storage tab (Upstash REST, or a Redis URL).
-   Keys: fl:users (accounts), fl:data ({rev, data}), fl:secret (signs sign-in cookies). */
+   Keys: fl:users (accounts), fl:trees (list of family trees), fl:tree:<id> ({rev, data} of one tree),
+   fl:invites (links for starting a new tree), fl:secret (signs sign-in cookies).
+   One login per person; each account has a role per tree ({trees: {<id>: 'editor'|'viewer'}}).
+   The site owner (owner: true) can open and edit every tree, and is the only one who makes invites. */
 const crypto = require('crypto');
 
 let redis = null;
@@ -34,7 +37,8 @@ async function cmd(...args) {
 }
 async function getJSON(k) { const v = await cmd('GET', k); return v ? JSON.parse(v) : null; }
 async function setJSON(k, v) { await cmd('SET', k, JSON.stringify(v)); }
-const K = { users: 'fl:users', data: 'fl:data', secret: 'fl:secret' };
+const K = { users: 'fl:users', data: 'fl:data', secret: 'fl:secret', trees: 'fl:trees', invites: 'fl:invites', tree: (id) => 'fl:tree:' + id };
+function newId() { return crypto.randomBytes(6).toString('hex'); }
 
 async function secret() {
   let s = await cmd('GET', K.secret);
@@ -87,7 +91,7 @@ function cookies(req) {
 const REMEMBER_DAYS = 180;
 async function setSession(res, u, remember) {
   const exp = remember ? Date.now() + REMEMBER_DAYS * 864e5 : Date.now() + 12 * 3600e3;
-  const tok = await sign({ k: u.key, r: u.role, v: u.ver || 1, exp });
+  const tok = await sign({ k: u.key, v: u.ver || 1, exp });
   res.setHeader('Set-Cookie', 'fl_session=' + tok + '; Path=/; HttpOnly; Secure; SameSite=Lax' + (remember ? '; Max-Age=' + REMEMBER_DAYS * 86400 : ''));
 }
 function clearSession(res) { res.setHeader('Set-Cookie', 'fl_session=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0'); }
@@ -96,9 +100,39 @@ async function current(req) {
   const p = await verify(cookies(req).fl_session);
   if (!p) return null;
   const u = (await users()).find((x) => x.key === p.k);
-  return u && u.role === p.r && (u.ver || 1) === p.v ? u : null;
+  return u && (u.ver || 1) === p.v ? u : null;
 }
-function publicList(list, me) { return list.map((u) => ({ name: u.name, role: u.role, me: !!me && u.key === me.key })); }
+/* Role of an account in one tree: the owner edits everything. */
+function roleIn(u, id) { return u ? (u.owner ? 'editor' : (u.trees || {})[id] || null) : null; }
+async function treeList() { return (await getJSON(K.trees)) || []; }
+async function treesFor(u) {
+  const all = await treeList();
+  return all.filter((t) => roleIn(u, t.id)).map((t) => ({ id: t.id, name: t.name, role: roleIn(u, t.id) }));
+}
+async function meInfo(u) { return { name: u.name, owner: !!u.owner, trees: await treesFor(u) }; }
+function query(req) { return new URL(req.url || '/', 'http://x').searchParams; }
+/* Members of one tree, for its editors. */
+function members(list, id, me) {
+  return list.filter((u) => (u.trees || {})[id] || u.owner).map((u) => ({ name: u.name, role: u.owner ? 'owner' : u.trees[id], me: !!me && u.key === me.key }));
+}
+/* One-time move from the single-family version: the family becomes tree "main", everyone keeps their
+   role there, and the first editor becomes the site owner. The old fl:data key is kept as a backup. */
+async function migrate() {
+  if (await cmd('GET', K.trees)) return;
+  const list = await users();
+  const old = await getJSON(K.data);
+  if (!list.length && !old) return;
+  const name = (old && old.data && old.data.meta && old.data.meta.familyName) || 'Our Family';
+  if (old && !(await cmd('GET', K.tree('main')))) await setJSON(K.tree('main'), old);
+  let ownerSet = list.some((u) => u.owner);
+  list.forEach((u) => {
+    if (!u.trees) u.trees = { main: u.role === 'editor' ? 'editor' : 'viewer' };
+    if (!ownerSet && (u.role === 'editor' || u.trees.main === 'editor')) { u.owner = true; ownerSet = true; }
+    delete u.role;
+  });
+  await setJSON(K.users, list);
+  await setJSON(K.trees, [{ id: 'main', name }]);
+}
 
 function send(res, code, obj) {
   res.statusCode = code;
@@ -129,4 +163,4 @@ function validNew(name, pw) {
   return null;
 }
 
-module.exports = { cmd, getJSON, setJSON, K, hashPw, checkPw, keyOf, setSession, clearSession, users, current, publicList, send, body, wrap, validData, validNew };
+module.exports = { cmd, getJSON, setJSON, K, newId, hashPw, checkPw, keyOf, setSession, clearSession, users, current, roleIn, treeList, treesFor, meInfo, query, members, migrate, send, body, wrap, validData, validNew };

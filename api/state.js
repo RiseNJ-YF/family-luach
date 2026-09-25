@@ -1,13 +1,22 @@
-/* GET /api/state — is the site set up, who is signed in, and the family name for the sign-in screen. */
-const { getJSON, K, users, current, send, wrap } = require('./_lib');
+/* GET /api/state[?invite=CODE] — is the site set up, who is signed in (with the trees they can open),
+   the name for the sign-in screen, and whether an invite link is still good. */
+const { getJSON, K, users, current, treeList, meInfo, query, migrate, send, wrap } = require('./_lib');
 
 module.exports = wrap(async (req, res) => {
+  await migrate();
   const list = await users();
   const me = list.length ? await current(req) : null;
-  const stored = await getJSON(K.data);
+  const trees = await treeList();
+  const code = query(req).get('invite');
+  let invite = null;
+  if (code) {
+    const inv = ((await getJSON(K.invites)) || []).find((i) => i.code === code);
+    invite = { ok: !!(inv && !inv.used) };
+  }
   send(res, 200, {
     setup: !list.length,
-    title: stored && stored.data && stored.data.meta ? stored.data.meta.familyName || '' : '',
-    me: me ? { name: me.name, role: me.role } : null,
+    title: trees.length === 1 ? trees[0].name : '',
+    me: me ? await meInfo(me) : null,
+    invite,
   });
 });

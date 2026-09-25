@@ -386,6 +386,9 @@ textarea.inp{min-height:70px;resize:vertical}
 .role{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-radius:999px;padding:2px 8px;border:1px solid var(--line-2);color:var(--ink-2)}
 .role.editor{border-color:var(--accent);color:var(--accent)}
 .acct-add .inp{max-width:200px}
+.tree-switch{max-width:240px}
+.role.owner{border-color:var(--c-anniversary);color:var(--c-anniversary)}
+.invite-link{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
 .panel h4.subh{margin:18px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(16px + env(safe-area-inset-top,0px));z-index:60;background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;box-shadow:var(--shadow);font-weight:600;font-size:14px;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){
@@ -714,6 +717,7 @@ function render(){
   h+='<header class="top"><div class="brand"><h1>'+esc(data.meta.familyName)+'</h1>';
   h+='<div class="today-line"><span>'+esc(WDL[dow(TODAY)])+', '+esc(fmtG(TODAY,{long:true}))+'</span><span class="sep">|</span><span>'+esc(fmtH(hT))+'</span><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hT))+'</span></div></div>';
   h+='<div class="top-actions">';
+  if(WEB&&web.me&&web.me.trees&&web.me.trees.length>1) h+=treeSwitchHTML();
   if(canWrite){
     if(ui.preview) h+='<span class="mode-pill">Previewing view-only</span><button class="btn sm" data-act="preview">Back to editing</button>';
     else h+='<button class="btn sm ghost" data-act="panel" data-p="settings">Settings</button><button class="btn sm ghost" data-act="panel" data-p="share">Share</button><button class="btn sm primary" data-act="new-person">Add person</button>';
@@ -816,6 +820,7 @@ function settingsPanel(){
   h+='<h4 class="subh">Backup</h4><p>Download all the family data as a file, or load a file saved earlier. This is also how you move data between the Claude version and the website.</p>';
   h+='<div class="row"><button class="btn sm" data-act="export-data">Download data file</button><button class="btn sm" data-act="import-data">Import a data file…</button><input type="file" id="import-file" accept=".json,application/json" hidden></div>';
   h+=accountsHTML();
+  h+=ownerHTML();
   if(ui.clearAsk) h+='<div class="row"><div class="confirm">Remove all '+data.people.length+' people and their dates? You can still discard this before saving. <button class="btn sm danger" data-act="clear-yes">Remove all</button><button class="btn sm ghost" data-act="clear-no">Keep them</button></div></div>';
   h+='</section>';
   return h;
@@ -2286,14 +2291,36 @@ window.flMakePdf=makePdf;
 /* ---------- Website mode (Vercel) ----------
    Outside Claude the page runs as a website backed by the small server in /api:
    sign-in with username + password (checked on the server, kept with a secure cookie), family data and
-   accounts stored in the site's private database. Viewers can read; editors can also save and manage
-   who can sign in. */
+   accounts stored in the site's private database. A site can hold several family trees: each person has
+   one login and a role (viewer or editor) in each tree they can open. Editors manage who can open their
+   tree; the site owner can open every tree, start new ones and send invite links for starting one. */
 var WEB=!(window.claude&&typeof window.claude.use==='function');
 var SITE_URL='https://family-luach-beta.vercel.app/';
 /* The old GitHub Pages address forwards to the Vercel site. */
 if(WEB&&/\.github\.io$/i.test(location.hostname)) location.replace(SITE_URL);
-var web={state:WEB?'loading':'off',err:'',title:'',me:null,rev:0,busy:false,msg:''};
-var accounts=null;
+var web={state:WEB?'loading':'off',err:'',title:'',me:null,rev:0,busy:false,msg:'',tree:null,invite:null};
+var accounts=null,ownerTrees=null,invites=null;
+function curTree(){return web.me&&web.me.trees?web.me.trees.filter(function(t){return t.id===web.tree;})[0]:null;}
+function myRole(){var t=curTree();return t?t.role:null;}
+function tq(){return '?tree='+encodeURIComponent(web.tree||'');}
+/* Which tree to open: the one chosen last time on this device, else the first. */
+function pickTree(){
+  var ts=(web.me&&web.me.trees)||[];if(!ts.length) return null;
+  var want=web.tree||lsGet('fl-tree','');
+  var t=ts.filter(function(x){return x.id===want;})[0]||ts[0];
+  web.tree=t.id;lsSet('fl-tree',t.id);PKEY='family-luach-pending:'+t.id;
+  return t;
+}
+function treeSwitchHTML(){
+  var h='<select class="sel tree-switch" id="tree-switch" data-act-change="tree-switch" aria-label="Family tree">';
+  web.me.trees.forEach(function(t){h+='<option value="'+esc(t.id)+'"'+(t.id===web.tree?' selected':'')+'>'+esc(t.name||'Family')+'</option>';});
+  return h+'</select>';
+}
+function switchTree(id){
+  if(dirty){toast('Save or discard your changes before switching family trees.');var sel=$('#tree-switch');if(sel) sel.value=web.tree;return;}
+  web.tree=id;lsSet('fl-tree',id);ui.treeRoot=null;ui.treeOpen={};ui.panel=null;drawer=null;accounts=null;
+  web.state='loading';render();loadData().catch(function(e){web.state='error';web.err=netErr(e);render();});
+}
 function api(path,method,payload){
   return fetch('/api/'+path,{method:method||'GET',credentials:'same-origin',cache:'no-store',
     headers:payload?{'Content-Type':'application/json'}:{},body:payload?JSON.stringify(payload):undefined})
@@ -2301,18 +2328,27 @@ function api(path,method,payload){
 }
 function netErr(e){return e.status===503?e.message:e.status?e.message:'Couldn’t reach the family calendar. Check your connection and try again.';}
 function loadData(){
-  return api('data').then(function(r){
+  var t=pickTree();
+  if(!t){web.state='notree';render();return Promise.resolve();}
+  return api('data'+tq()).then(function(r){
     web.rev=r.rev;saved=normalize(r.data);data=JSON.parse(JSON.stringify(saved));reindex();dirty=false;
-    web.state='ready';web.err='';canWrite=web.me.role==='editor';
+    web.state='ready';web.err='';canWrite=t.role==='editor';accounts=null;
     if(canWrite){restorePending();loadAccounts();}
+    if(web.me.owner) loadOwner();
     renderAll();
   });
 }
-function loadAccounts(){api('users').then(function(r){accounts=r.users;render();},function(){});}
+function loadAccounts(){api('users'+tq()).then(function(r){accounts=r.users;render();},function(){});}
+function loadOwner(){
+  api('trees').then(function(r){ownerTrees=r.trees;render();},function(){});
+  api('invites').then(function(r){invites=r.invites;render();},function(){});
+}
 function webBoot(){
   web.state='loading';render();
-  api('state').then(function(st){
+  var code=new URLSearchParams(location.search).get('invite');
+  api('state'+(code?'?invite='+encodeURIComponent(code):'')).then(function(st){
     web.title=st.title||'';
+    if(code&&st.invite){web.invite=code;web.me=st.me;web.state=st.invite.ok?'invite':'invite-bad';render();return;}
     if(st.setup){web.state='empty';render();return;}
     if(!st.me){web.state='login';render();return;}
     web.me=st.me;return loadData();
@@ -2349,10 +2385,11 @@ function runSetup(){
     .catch(function(e){web.busy=false;web.msg='';web.err=e.message||String(e);render();});
 }
 function webSave(){
-  if(!web.me||web.me.role!=='editor'){toast('Only editors can save.');return;}
+  if(myRole()!=='editor'){toast('Only editors can save.');return;}
   saving=true;render();
-  api('data','PUT',{rev:web.rev,data:data}).then(function(r){
+  api('data'+tq(),'PUT',{rev:web.rev,data:data}).then(function(r){
     web.rev=r.rev;saving=false;saved=JSON.parse(JSON.stringify(data));dirty=false;
+    var ct=curTree();if(ct&&data.meta.familyName) ct.name=data.meta.familyName;
     try{sessionStorage.removeItem(PKEY);}catch(e){}
     renderAll();toast('Saved. Everyone sees it right away.');
   },function(e){
@@ -2363,39 +2400,108 @@ function webSave(){
 }
 function acctDo(payload){
   web.busy=true;render();
-  api('users','POST',payload).then(function(r){accounts=r.users;web.busy=false;ui.acctErr='';ui.rmAsk=null;render();toast(r.message||'Done.');},
+  api('users'+tq(),'POST',payload).then(function(r){accounts=r.users;web.busy=false;ui.acctErr='';ui.rmAsk=null;render();toast(r.message||'Done.');if(web.me.owner) loadOwner();},
     function(e){web.busy=false;ui.acctErr=netErr(e);render();});
 }
 function acctAdd(){acctDo({action:'add',name:$('#ac-user').value.trim(),password:$('#ac-pw').value,role:$('#ac-role').value});}
+function acctGrant(){acctDo({action:'grant',name:$('#ag-user').value.trim(),role:$('#ag-role').value});}
+function acctRole(i){var a=accounts[i];if(a) acctDo({action:'grant',name:a.name,role:a.role==='editor'?'viewer':'editor'});}
+/* Site owner: new trees and invite links */
+function ownerDo(path,payload,then){
+  web.busy=true;render();
+  api(path,'POST',payload).then(function(r){web.busy=false;ui.ownErr='';then(r);},function(e){web.busy=false;ui.ownErr=netErr(e);render();});
+}
+function newTree(){
+  var name=($('#nt-name')||{}).value||'';
+  ownerDo('trees',{action:'create',name:name.trim()},function(r){web.me=r.me;toast('New family tree started.');switchTree(r.id);});
+}
+function inviteLink(code){return location.origin+location.pathname+'?invite='+encodeURIComponent(code);}
+function makeInvite(){ownerDo('invites',{action:'create'},function(r){invites=r.invites;ui.newInvite=r.code;render();});}
+function revokeInvite(code){ownerDo('invites',{action:'revoke',code:code},function(r){invites=r.invites;if(ui.newInvite===code) ui.newInvite=null;render();toast('Invite link cancelled.');});}
+function copyText(txt){try{navigator.clipboard.writeText(txt).then(function(){toast('Link copied.');},function(){toast('Couldn’t copy — select the link and copy it.');});}catch(e){toast('Couldn’t copy — select the link and copy it.');}}
+function ownerHTML(){
+  if(!WEB||!web.me||!web.me.owner) return '';
+  var h='<h4 class="subh">Family trees (site owner)</h4><p>You can open every family tree on this site. Switch between them with the menu at the top of the page.</p>';
+  if(ownerTrees){
+    h+='<div class="acct-list">';
+    ownerTrees.forEach(function(t){h+='<div class="acct"><div class="acct-who"><b>'+esc(t.name)+'</b><span class="note">'+t.people+(t.people===1?' person':' people')+' can open it</span>'+(t.id===web.tree?'<span class="note">· open now</span>':'')+'</div>'+(t.id!==web.tree?'<div class="acct-do"><button class="btn sm" data-act="tree-open" data-id="'+esc(t.id)+'">Open</button></div>':'')+'</div>';});
+    h+='</div>';
+  } else h+='<p class="note">Loading…</p>';
+  h+='<div class="row acct-add"><input class="inp" id="nt-name" placeholder="New family name" autocomplete="off"><button class="btn sm primary" data-act="tree-new"'+(web.busy?' disabled':'')+'>Start a new family tree</button></div>';
+  h+='<h4 class="subh">Invite someone to start their own tree</h4><p>Each link can be used once. Whoever opens it names their family and becomes its editor — with a new username, or with their existing one (the new tree is added to their account). They then add their own people.</p>';
+  h+='<div class="row"><button class="btn sm primary" data-act="invite-new"'+(web.busy?' disabled':'')+'>Create an invite link</button></div>';
+  var open=(invites||[]).filter(function(i){return !i.used;}),used=(invites||[]).filter(function(i){return i.used;});
+  if(open.length){
+    h+='<div class="acct-list">';
+    open.forEach(function(i){var link=inviteLink(i.code);h+='<div class="acct"><div class="acct-who"><span class="invite-link">'+esc(link)+'</span>'+(ui.newInvite===i.code?'<span class="note">new</span>':'')+'</div><div class="acct-do"><button class="btn sm" data-act="invite-copy" data-link="'+esc(link)+'">Copy link</button><button class="btn sm ghost" data-act="invite-revoke" data-code="'+esc(i.code)+'">Cancel</button></div></div>';});
+    h+='</div>';
+  }
+  if(used.length) h+='<p class="note">Used: '+used.map(function(i){return esc(i.usedBy||'someone')+' started “'+esc(i.tree||'a tree')+'”';}).join(' · ')+'</p>';
+  if(ui.ownErr) h+='<p class="err">'+esc(ui.ownErr)+'</p>';
+  return h;
+}
+/* Invite link: start a new family tree */
+function acceptInvite(){
+  var fam=$('#iv-family').value.trim(),name=web.me?'':$('#iv-user').value.trim(),pw=web.me?'':$('#iv-pw').value,pw2=web.me?'':$('#iv-pw2').value;
+  if(!fam){web.err='Type a name for your family tree.';render();return;}
+  if(!web.me){
+    if(!name){web.err='Choose a username (or type the one you already have).';render();return;}
+    if(pw.length<6){web.err='Use at least 6 characters for the password.';render();return;}
+    if(pw!==pw2){web.err='The two passwords don’t match.';render();return;}
+  }
+  web.err='';web.busy=true;render();
+  api('invites','POST',{action:'accept',code:web.invite,family:fam,name:name,password:pw}).then(function(r){
+    web.busy=false;web.me=r.me;web.tree=r.id;web.invite=null;
+    try{history.replaceState(null,'',location.pathname);}catch(e){}
+    return loadData().then(function(){toast('Your family tree is ready. Start by adding people, then invite family in Settings.');});
+  }).catch(function(e){web.busy=false;web.err=netErr(e);render();});
+}
 function acctReset(i){var a=accounts[i],inp=$('#rp-'+i);if(a) acctDo({action:'reset',name:a.name,password:inp?inp.value:''});}
 function acctRemove(i){var a=accounts[i];if(a) acctDo({action:'remove',name:a.name});}
 function accountsHTML(){
-  if(!WEB||!web.me||web.me.role!=='editor') return '';
-  var h='<h4 class="subh">People who can sign in</h4><p>Viewers can look at everything. Editors can also change the family data and manage this list. You choose each person’s password here and tell it to them.</p>';
+  if(!WEB||!web.me||myRole()!=='editor') return '';
+  var ct=curTree();
+  var h='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>Viewers can look at everything in this tree. Editors can also change it and manage this list. Each person has one username and password for every tree they belong to.</p>';
   if(!accounts) return h+'<p class="note">Loading…</p>';
   h+='<div class="acct-list">';
   accounts.forEach(function(a,i){
-    h+='<div class="acct"><div class="acct-who"><b>'+esc(a.name)+'</b><span class="role '+a.role+'">'+(a.role==='editor'?'Editor':'Viewer')+'</span>'+(a.me?'<span class="note">you</span>':'')+'</div>';
+    h+='<div class="acct"><div class="acct-who"><b>'+esc(a.name)+'</b><span class="role '+a.role+'">'+(a.role==='owner'?'Site owner':a.role==='editor'?'Editor':'Viewer')+'</span>'+(a.me?'<span class="note">you</span>':'')+'</div>';
     h+='<div class="acct-do"><input class="inp" id="rp-'+i+'" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-reset" data-i="'+i+'"'+(web.busy?' disabled':'')+'>'+(a.me?'Change my password':'Set password')+'</button>';
-    if(ui.rmAsk===i) h+='<span class="confirm">Remove '+esc(a.name)+'? <button class="btn sm danger" data-act="acct-remove" data-i="'+i+'">Remove</button><button class="btn sm ghost" data-act="acct-rm-no">Keep</button></span>';
-    else if(!a.me) h+='<button class="btn sm ghost" data-act="acct-rm-ask" data-i="'+i+'">Remove</button>';
+    if(!a.me&&a.role!=='owner') h+='<button class="btn sm ghost" data-act="acct-role" data-i="'+i+'"'+(web.busy?' disabled':'')+'>'+(a.role==='editor'?'Make viewer':'Make editor')+'</button>';
+    if(ui.rmAsk===i) h+='<span class="confirm">Remove '+esc(a.name)+' from this tree? <button class="btn sm danger" data-act="acct-remove" data-i="'+i+'">Remove</button><button class="btn sm ghost" data-act="acct-rm-no">Keep</button></span>';
+    else if(!a.me&&a.role!=='owner') h+='<button class="btn sm ghost" data-act="acct-rm-ask" data-i="'+i+'">Remove</button>';
     h+='</div></div>';
   });
-  h+='</div><div class="row acct-add"><input class="inp" id="ac-user" placeholder="Username" autocomplete="off"><input class="inp" id="ac-pw" type="password" placeholder="Password" autocomplete="new-password"><select class="sel" id="ac-role"><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button class="btn sm primary" data-act="acct-add"'+(web.busy?' disabled':'')+'>Add person</button></div>';
+  h+='</div><p style="margin:12px 0 4px"><b>Add a new person</b></p><div class="row acct-add"><input class="inp" id="ac-user" placeholder="Username" autocomplete="off"><input class="inp" id="ac-pw" type="password" placeholder="Password" autocomplete="new-password"><select class="sel" id="ac-role"><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button class="btn sm primary" data-act="acct-add"'+(web.busy?' disabled':'')+'>Add person</button></div>';
+  h+='<p style="margin:12px 0 4px"><b>Give an existing user access</b> <span class="note">— someone who already signs in to another family tree here</span></p><div class="row acct-add"><input class="inp" id="ag-user" placeholder="Their username" autocomplete="off"><select class="sel" id="ag-role"><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button class="btn sm primary" data-act="acct-grant"'+(web.busy?' disabled':'')+'>Give access</button></div>';
   if(ui.acctErr) h+='<p class="err">'+esc(ui.acctErr)+'</p>';
-  h+='<p class="note">Removing someone or setting a new password signs them out everywhere straight away.</p>';
+  h+='<p class="note">Removing someone or setting a new password takes effect straight away. Someone removed from their only family tree can no longer sign in.</p>';
   return h;
 }
 function webFooter(){
   if(!WEB) return '';
   var bits=['<span>Family Luach</span>'];
-  if(web.state==='ready'&&web.me) bits.push('<span>Signed in as '+esc(web.me.name)+' · '+(web.me.role==='editor'?'Editor':'Viewer')+'</span>','<button class="linkbtn" data-act="sign-out">Sign out</button>');
+  if(web.state==='ready'&&web.me) bits.push('<span>Signed in as '+esc(web.me.name)+' · '+(web.me.owner?'Site owner':myRole()==='editor'?'Editor':'Viewer')+'</span>','<button class="linkbtn" data-act="sign-out">Sign out</button>');
   return '<footer class="webfoot">'+bits.join('<span class="sep">·</span>')+'</footer>';
 }
 function gateHTML(){
   var h='<div class="wrap"><div class="gate">';
   if(web.state==='loading') h+='<p class="note">Loading the family calendar…</p>';
   else if(web.state==='error') h+='<h1>Family Luach</h1><p>'+esc(web.err)+'</p><div><button class="btn sm" data-act="reload">Try again</button></div>';
+  else if(web.state==='invite'){
+    h+='<h1>Start your family tree</h1><p>You’ve been invited to start your own family tree here. You’ll be its editor, and you can add the people in your family and give them their own sign-in.</p><form id="invite" class="form" style="gap:12px">';
+    h+='<div class="field"><label for="iv-family">Family name</label><input class="inp" id="iv-family" placeholder="e.g. The Cohen Family" autocomplete="off"></div>';
+    if(web.me) h+='<p class="note">You’re signed in as <b>'+esc(web.me.name)+'</b> — the new tree will be added to your account.</p>';
+    else{
+      h+='<div class="field"><label for="iv-user">Username</label><input class="inp" id="iv-user" autocomplete="username" autocapitalize="off" spellcheck="false"></div>';
+      h+='<div class="fgrid"><div class="field"><label for="iv-pw">Password</label><input class="inp" id="iv-pw" type="password" autocomplete="new-password"></div><div class="field"><label for="iv-pw2">Type it again</label><input class="inp" id="iv-pw2" type="password" autocomplete="new-password"></div></div>';
+      h+='<p class="note">Already have a username on this site? Type it with your usual password, and the new tree is added to your account.</p>';
+    }
+    if(web.err) h+='<p class="err">'+esc(web.err)+'</p>';
+    h+='<div><button class="btn primary" type="submit"'+(web.busy?' disabled':'')+'>'+(web.busy?'Working…':'Start my family tree')+'</button></div></form>';
+  }
+  else if(web.state==='invite-bad') h+='<h1>This invite link can’t be used</h1><p>It has already been used or it was cancelled. Ask the person who sent it for a new one.</p><div><button class="btn sm" data-act="invite-leave">Go to sign in</button></div>';
+  else if(web.state==='notree') h+='<h1>No family tree yet</h1><p>You’re signed in as <b>'+esc(web.me?web.me.name:'')+'</b>, but you don’t have access to any family tree. Ask a family editor to give you access.</p><div><button class="btn sm" data-act="sign-out">Sign out</button></div>';
   else if(web.state==='login'){
     h+='<h1>'+esc(web.title||'Family Luach')+'</h1><p>Sign in with the username and password you were given.</p>';
     h+='<form id="login" class="form" style="gap:12px">';
@@ -2422,7 +2528,7 @@ function gateHTML(){
 }
 function webSharePanel(){
   var url=location.origin+location.pathname;
-  return '<section class="panel"><h3>Share with family</h3><p>Send each person this address together with their username and password (add people in Settings → People who can sign in):</p>'+
+  return '<section class="panel"><h3>Share with family</h3><p>Send each person this address together with their username and password (add people in Settings → People who can open this tree):</p>'+
   '<div class="row"><b class="copyable">'+esc(url)+'</b><button class="btn sm" data-act="copy-url">Copy address</button></div>'+
   '<p>Viewers can look at everything; only editors see the edit controls.</p>'+
   '<div class="row"><button class="btn sm" data-act="preview">Preview what viewers see</button><button class="btn sm ghost" data-act="panel" data-p="">Close</button></div></section>';
@@ -2514,6 +2620,14 @@ document.addEventListener('click',function(e){
     case 'setup-open':web.state='setup';web.err='';render();break;
     case 'setup-cancel':web.state='empty';web.err='';render();break;
     case 'acct-add':acctAdd();break;
+    case 'acct-grant':acctGrant();break;
+    case 'acct-role':acctRole(+t.dataset.i);break;
+    case 'tree-new':newTree();break;
+    case 'tree-open':switchTree(t.dataset.id);break;
+    case 'invite-new':makeInvite();break;
+    case 'invite-copy':copyText(t.dataset.link);break;
+    case 'invite-revoke':revokeInvite(t.dataset.code);break;
+    case 'invite-leave':try{history.replaceState(null,'',location.pathname);}catch(e){}webBoot();break;
     case 'acct-reset':acctReset(+t.dataset.i);break;
     case 'acct-rm-ask':ui.rmAsk=+t.dataset.i;render();break;
     case 'acct-rm-no':ui.rmAsk=null;render();break;
@@ -2620,7 +2734,7 @@ document.addEventListener('click',function(e){
     case 'del-yes':deletePerson(drawer.draft.id);break;
     case 'save':save();break;
     case 'discard':discard();break;
-    case 'panel':ui.panel=t.dataset.p||null;ui.clearAsk=false;if(ui.panel==='settings'&&WEB&&canWrite) loadAccounts();render();break;
+    case 'panel':ui.panel=t.dataset.p||null;ui.clearAsk=false;if(ui.panel==='settings'&&WEB&&canWrite){loadAccounts();if(web.me&&web.me.owner) loadOwner();}render();break;
     case 'preview':ui.preview=!ui.preview;ui.panel=null;renderAll();window.scrollTo(0,0);break;
     case 'set-name':var v=$('#set-name').value.trim();if(v){data.meta.familyName=v;markDirty();render();toast('Name updated — remember to save.');}break;
     case 'clear-ask':ui.clearAsk=true;render();break;
@@ -2648,6 +2762,7 @@ document.addEventListener('change',function(e){
   if(t.id==='import-file'&&t.files&&t.files[0]){importData(t.files[0]);t.value='';return;}
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;ui.zoomFit=true;render();}
+  if(a==='tree-switch'){switchTree(t.value);return;}
   if(a==='tree-layout'){ui.treeLayout=t.value;lsSet('fl-tlayout',t.value);ui.zoomFit=true;render();}
   if(a==='sort'){ui.sort=t.value;lsSet('fl-sort',ui.sort);$('#people-grid').innerHTML=peopleCards();}
 });
@@ -2699,7 +2814,7 @@ window.addEventListener('resize',function(){
   if(window.innerWidth===lastW){var z=ui.zoomFit;ui.zoomFit=false;sizeTree();ui.zoomFit=z;return;}
   lastW=window.innerWidth;sizeTree();
 });
-document.addEventListener('submit',function(e){e.preventDefault();if(e.target.id==='login') signIn();if(e.target.id==='setup') runSetup();});
+document.addEventListener('submit',function(e){e.preventDefault();if(e.target.id==='login') signIn();if(e.target.id==='setup') runSetup();if(e.target.id==='invite') acceptInvite();});
 /* Root the tree at the oldest known ancestor, going through a spouse for in-laws with no parents listed. */
 function topAncestor(id){
   function hasPar(x){var p=P(x);return p&&p.parents.some(function(q){return P(q);});}
