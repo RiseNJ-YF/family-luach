@@ -234,6 +234,7 @@ button:disabled{cursor:default;opacity:.6}
 .ftree .fl-v.ms3{border-left-width:4px!important}
 .fring{position:absolute;transform:translate(-50%,-50%);background:var(--surface);color:var(--c-anniversary);font-size:15px;line-height:1;padding:2px 4px;border-radius:6px;display:flex;flex-direction:column;align-items:center;gap:1px}
 .fring.ended{color:var(--ink-3)}
+.fring .fwed{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:2px;font-family:var(--sans);font-size:10.5px;font-weight:700;color:var(--c-anniversary);white-space:nowrap;background:var(--surface);padding:0 3px;border-radius:4px;line-height:1.25}
 .fring small{font-family:var(--sans);font-size:10px;color:var(--ink-3);font-weight:700}
 .fcell{position:absolute}
 .tcard.ghost{border-style:dashed;background:var(--bg);box-shadow:none}
@@ -250,7 +251,8 @@ button:disabled{cursor:default;opacity:.6}
 .otree.rtl .orow{flex-direction:row-reverse}
 .otree .og{position:absolute;width:0;border-left:1.5px solid var(--line-2)}
 .otree .oh{position:absolute;top:50%;height:0;border-top:1.5px solid var(--line-2)}
-.otree .oring{align-self:center;color:var(--c-anniversary);width:30px;flex:none;text-align:center;font-size:15px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.otree .oring{position:relative;align-self:center;color:var(--c-anniversary);width:50px;flex:none;text-align:center;font-size:15px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.otree .oring .owed{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:1px;font-size:10.5px;font-weight:700;color:var(--c-anniversary);white-space:nowrap;line-height:1.25}
 .otree .oring small{font-size:10px;color:var(--ink-3);font-weight:600}
 .otree .oc{position:absolute;box-sizing:border-box;border:0 solid var(--line-2)}
 .otree .ob{position:absolute;bottom:0;height:0;border-top:1.5px solid var(--line-2)}
@@ -266,6 +268,7 @@ button:disabled{cursor:default;opacity:.6}
 .tcard .tl{font-size:12px;color:var(--ink-3)}
 .tcard .td{font-size:12px;color:var(--ink-2)}
 .tcard .th{font-size:13px;color:var(--ink-2)}
+.tcard .tyz{font-size:12px;color:var(--ink-2)}
 .tcard .tk{font-size:11px;color:var(--ink-3);margin-top:2px}
 .tcard.dec{background:var(--bg);border-style:dashed}
 .tcard.root{border-color:var(--accent);border-width:1.5px}
@@ -1018,8 +1021,8 @@ function coupleLabel(p){return chainOf(p.id,{}).map(function(id){return primaryT
 function tcard(p,isRoot,placed,pdf,ghost,note){
   var b=parseISO(p.birth),d=parseISO(p.death),dates='',hd='';
   /* Hebrew-mode tree PDF, age hidden: the Hebrew date (day and month only) instead of the English one. */
-  if(pdf&&noAge(p)&&ui.calMode==='heb'&&(p.deceased?d:b&&!p.birthNoYear)){hd=fmtHe(p.deceased?hebOf(p.death,p.deathSunset):hebOf(p.birth,p.birthSunset),false);dates=p.deceased?'Yahrzeit ':'Birthday ';}
-  else if(pdf&&noAge(p)) dates=p.deceased?(d?'? – '+d.y:''):(b?'Birthday '+fmtMD(b):'');
+  if(pdf&&noAge(p)&&ui.calMode==='heb'&&!p.deceased&&b&&!p.birthNoYear){hd=fmtHe(hebOf(p.birth,p.birthSunset),false);dates='Birthday ';}
+  else if(pdf&&noAge(p)) dates=p.deceased?(d&&ui.calMode!=='heb'?'? – '+d.y:''):(b?'Birthday '+fmtMD(b):'');
   else if(p.deceased) dates=(b&&!p.birthNoYear?b.y:'?')+' – '+(d?d.y:'?');
   else if(b&&!p.birthNoYear) dates=b.y+' · age '+ageAt(p,TODAY);
   else if(b) dates='Birthday '+fmtMD(b);
@@ -1037,6 +1040,7 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
     if(p.last||p.maiden) h+='<span class="tl">'+esc([p.last,p.maiden?'('+p.maiden+')':''].filter(Boolean).join(' '))+'</span>';
   }
   if(dates) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
+  if(p.deceased&&d) h+='<span class="tyz"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
   if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
   if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gc[1]?' · '+gc[1]+' grand':'')+'</span>';
   if(note){
@@ -1055,7 +1059,7 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
    behind the earlier spouses' cards, one line per marriage at its own height and in its own style
    (1st solid, 2nd dashed, 3rd dotted, 4th double). Children drop from their own marriage's label, in the
    gap just before that husband or wife, or from one parent's card when the other parent isn't in the row. */
-var TW=172,TH=124,SG=46,SIB=22,GG=44,VG=90,TPAD=24;
+var TW=172,TH=124,SG=58,SIB=22,GG=44,VG=90,TPAD=24;
 function chainOf(start,seen){
   var inC={};inC[start]=1;
   function others(x){var o=spousesOf(x).map(function(s){return s.pid;}).filter(function(id){return !seen[id]&&!inC[id];});o.forEach(function(id){inC[id]=1;});return o;}
@@ -1100,8 +1104,9 @@ function roundPath(pts,R){
    runs in the gap beside it, crosses in the gap just above the real card's row, and comes down into
    the real card's side near its top. So it never meets the line from the parents or a marriage line. */
 var LINKY=22;
-function linkPath(g,r,all){
-  var gt=g.y+TPAD,rt=r.y+TPAD,ya=gt+LINKY,yb=rt+LINKY,yh=rt-10,toLeft=(r.x+TW/2)<(g.x+TW/2);
+function linkPath(g,r,all,k){
+  /* k: how many other links already cross above the same row — each gets its own height */
+  var gt=g.y+TPAD,rt=r.y+TPAD,ya=gt+LINKY,yb=rt+LINKY,yh=rt-10-(k||0)*8,toLeft=(r.x+TW/2)<(g.x+TW/2);
   /* cards whose rows the vertical part [y0,y1] passes through */
   function blockers(y0,y1,skip){
     var lo=Math.min(y0,y1),hi=Math.max(y0,y1);
@@ -1149,6 +1154,12 @@ function marLines(marr,xs){
   var L=1;marr.forEach(function(g){if(g.lv+1>L) L=g.lv+1;});
   marr.forEach(function(g){g.ly=TH/2+(g.lv-(L-1)/2)*20;g.gx=(xs[g.j-1]+TW+xs[g.j])/2;g.st=marIdx(g.m);});
 }
+/* Wedding date shown above a marriage's ⚭ in the tree: Hebrew day and month in Hebrew mode, English otherwise. */
+function wedLabel(m){
+  var d=m&&!m.divorced?parseISO(m.date):null;if(!d) return '';
+  return ui.calMode==='heb'?fmtHe(hebOf(m.date,m.sunset),false):fmtMD(d);
+}
+function wedHTML(m){var t=wedLabel(m);return t?(ui.calMode==='heb'?'<bdi dir="rtl" lang="he">'+esc(t)+'</bdi>':esc(t)):'';}
 function marriageOrd(m){
   function ix(pid){var l=spousesOf(pid);if(l.length<2) return -1;for(var i=0;i<l.length;i++) if(l[i].m===m) return i;return -1;}
   var i=ix(m.a);if(i<0) i=ix(m.b);
@@ -1211,7 +1222,7 @@ function layoutFam(id,seen,depth){
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
     items.push({t:'h',x:x1,y:g.ly,w:x2-x1,cls:'mar ms'+g.st+(ended?' ended':'')});
-    items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
+    items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),wed:wedHTML(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
   });
   /* Bus heights: the group whose children sit farthest from its own marriage gets the highest line,
      so its horizontal run passes above the other groups' lines instead of crossing them. */
@@ -1352,7 +1363,7 @@ function layoutPack(id,seen,depth){
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
     items.push({t:'h',x:x1,y:g.ly,w:x2-x1,cls:'mar ms'+g.st+(ended?' ended':'')});
-    items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
+    items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),wed:wedHTML(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
   });
   var childY=TH+VG,maxSubH=0,LW=1.5;
   groups.forEach(function(g){
@@ -1420,7 +1431,7 @@ function layoutPack(id,seen,depth){
    indented under them. Each marriage has its own line: it drops from that marriage's ⚭ (or a lone
    parent's card), turns along under the cards and runs down beside the children, in that marriage's
    style (1st solid, 2nd dashed, 3rd dotted, 4th double). Every turn is rounded. */
-var OIND=44,OCW=214,ORW=30,ORAD=8;
+var OIND=44,OCW=214,ORW=50,ORAD=8;
 function outlineRows(root){
   var rows=[],seen={};
   function walk(id,depth,pass,elbow){
@@ -1447,10 +1458,10 @@ function outlineRows(root){
     });
     /* Families follow their ⚭ from the start of the row, so no two lines cross. */
     groups.sort(function(p,q){return (p.src.ring!=null?p.src.ring+0.5:p.src.card)-(q.src.ring!=null?q.src.ring+0.5:q.src.card);});
-    var rl={};data.marriages.forEach(function(m){if(ip[m.a]!=null&&ip[m.b]!=null) rl[Math.max(ip[m.a],ip[m.b])-1]=marriageOrd(m);});
+    var rl={},rw={};data.marriages.forEach(function(m){if(ip[m.a]!=null&&ip[m.b]!=null){var k=Math.max(ip[m.a],ip[m.b])-1;rl[k]=marriageOrd(m);rw[k]=wedHTML(m);}});
     var n=groups.length,x0=depth*OIND,sp=n>1?Math.min(8,24/(n-1)):0;
     groups.forEach(function(g,k){g.tx=x0+12+k*sp;});
-    rows.push({ids:chain,depth:depth,pass:pass,elbow:elbow,rl:rl,groups:groups.map(function(g){return {src:g.src,st:g.st,tx:g.tx};})});
+    rows.push({ids:chain,depth:depth,pass:pass,elbow:elbow,rl:rl,rw:rw,groups:groups.map(function(g){return {src:g.src,st:g.st,tx:g.tx};})});
     var mine=elbow&&!elbow.last?[{x:elbow.x,st:elbow.st}]:[];
     groups.forEach(function(g,j){
       var later=groups.slice(j+1).map(function(q){return {x:q.tx,st:q.st};});
@@ -1498,7 +1509,7 @@ function outlineRowHTML(r,root,placed,pdf,copies){
     h+=seg({x:g.tx,bottom:'0',height:(bk+1.5)+'px',width:(ORAD+1)+'px'},[S,'top'],'top-'+S,g.st);
   });
   h+=r.ids.map(function(id,i){
-    var ring=i<r.ids.length-1?'<span class="oring">⚭'+(r.rl[i]?'<small>'+r.rl[i]+'</small>':'')+'</span>':'';
+    var ring=i<r.ids.length-1?'<span class="oring">'+(r.rw&&r.rw[i]?'<span class="owed">'+r.rw[i]+'</span>':'')+'⚭'+(r.rl[i]?'<small>'+r.rl[i]+'</small>':'')+'</span>':'';
     return tcard(P(id),id===root,placed,pdf,r.ghost,!r.ghost&&i>0&&copies&&copies[id]?{act:'goto-copy'}:null)+ring;
   }).join('');
   return h+'</div>';
@@ -1542,11 +1553,11 @@ function treeMarkup(root,pdf){
     else if(ui.treeLayout==='branch') notes[id]={act:'open-branch'};
   });
   if(ui.calMode==='heb') mirrorTree(L);
-  var links='';
+  var links='',lk={};
   L.items.forEach(function(g){
     if(g.t!=='card'||!g.ghost) return;
     var r=L.items.filter(function(x){return x.t==='card'&&!x.ghost&&x.id===g.id;})[0];
-    if(r) links+=linkPath(g,r,L.items.filter(function(x){return x.t==='card';}));
+    if(r){var row=Math.round(r.y);lk[row]=(lk[row]||0);links+=linkPath(g,r,L.items.filter(function(x){return x.t==='card';}),lk[row]++);}
   });
   h+=linkSVG(links,L.w,L.h+TPAD+4);
   L.items.forEach(function(it){if(it.t==='card') placed[it.id]=1;});
@@ -1558,7 +1569,7 @@ function treeMarkup(root,pdf){
   });
   L.items.forEach(function(it){
     var y=it.y+TPAD;
-    if(it.t==='ring') h+='<span class="fring'+(it.ended?' ended':'')+'" style="left:'+it.x+'px;top:'+y+'px" title="'+esc(it.title)+'">⚭'+(it.label?'<small>'+it.label+'</small>':'')+'</span>';
+    if(it.t==='ring') h+='<span class="fring'+(it.ended?' ended':'')+'" style="left:'+it.x+'px;top:'+y+'px" title="'+esc(it.title)+'">'+(it.wed?'<span class="fwed">'+it.wed+'</span>':'')+'⚭'+(it.label?'<small>'+it.label+'</small>':'')+'</span>';
     else if(it.t==='card') h+='<div class="fcell" style="left:'+it.x+'px;top:'+y+'px">'+tcard(P(it.id),it.id===root,placed,pdf,it.ghost,it.ghost?null:notes[it.id])+'</div>';
     else if(it.t==='chip'&&!(pdf&&it.open)) h+='<button class="tchip'+(it.open?' open':'')+'" data-act="branch" data-k="'+esc(it.k)+'" style="left:'+it.x+'px;top:'+y+'px" title="'+(it.open?'Hide these children':'Show these children')+'">'+(it.open?'−':'+ '+it.n+(it.n===1?' child':' children'))+'</button>';
   });
@@ -1616,6 +1627,7 @@ function peopleCards(){
     var h='<button class="pcard" data-act="open" data-pid="'+esc(p.id)+'"><span class="pn">'+nameHTML(p,true)+'</span>';
     if(hn) h+='<span class="ph">'+esc(fullName(p))+'</span>';
     if(line) h+='<span class="pl">'+esc(line)+'</span>';
+    if(p.deceased&&parseISO(p.death)) h+='<span class="pl"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
     if(sp.length) h+='<span class="pl">Married to <bdi>'+esc(sp.join(', '))+'</bdi></span>';
     h+='<span class="kids"><span><b class="num">'+(gc[0]||0)+'</b>'+((gc[0]||0)===1?'child':'children')+'</span><span><b class="num">'+(gc[1]||0)+'</b>grandchildren</span>'+(gc[2]?'<span><b class="num">'+gc[2]+'</b>great-grand</span>':'')+'</span></button>';
     return h;
