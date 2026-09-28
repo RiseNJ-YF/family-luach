@@ -157,6 +157,7 @@ button:disabled{cursor:default;opacity:.6}
 .cell{border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface);min-height:108px;padding:6px 6px 8px;text-align:left;display:flex;flex-direction:column;gap:4px;min-width:0}
 .cell:hover{background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
 .cell.out{background:var(--bg)}
+.grid[dir=rtl] .cell{text-align:right}
 .cell.out .cd{color:var(--ink-3)}
 .cell.sat{background:color-mix(in srgb,var(--surface-2) 45%,var(--surface))}
 .cell.out.sat{background:var(--bg)}
@@ -411,6 +412,17 @@ textarea.inp{min-height:70px;resize:vertical}
 .dlg-pane .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
 .dlg-pane ol{margin:8px 0;padding-left:20px;color:var(--ink-2)}
 .dlg-pane h4.subh{margin:22px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
+.dlg-box.wide{width:min(1440px,100%);height:min(920px,100%)}
+.dlg-box.wide .dlg-nav{width:190px}
+.pr-opts{flex:0 0 400px}
+.pr-view{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface-2);border-inline-start:1px solid var(--line)}
+.pr-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
+.pr-pages{flex:1;min-height:0;overflow:auto;padding:18px;display:flex;flex-direction:column;align-items:center;gap:16px;transition:opacity .15s}
+.pr-pages.busy{opacity:.5}
+.pr-pages>img{max-width:100%;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18)}
+.pr-pages .pvw-frame{height:100%;min-height:400px}
+@media (max-width:1100px){.pr-opts{flex-basis:340px}}
+@media (max-width:720px){.dlg-box.wide .dlg-main{display:block;overflow:auto}.dlg-box.wide .dlg-nav{width:auto}.dlg-box.wide .dlg-pane,.dlg-box.wide .pr-pages{overflow:visible}.pr-view{border:0;border-top:1px solid var(--line)}.pr-bar{position:sticky;top:0;z-index:1}}
 .sec{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
 .sec>b{display:block;font-size:15px;margin-bottom:2px}
 .sec.danger{border-color:color-mix(in srgb,#B3261E 30%,var(--line))}
@@ -809,7 +821,10 @@ function render(){
   h+=webFooter();
   h+='</div>';
   if(dirty&&canWrite) h+='<div class="savebar" role="status"><span>'+(saving?'Saving…':'Unsaved changes — family members won’t see them until you save.')+'</span><button class="btn sm ghost" data-act="discard"'+(saving?' disabled':'')+'>Discard</button><button class="btn sm primary" data-act="save"'+(saving?' disabled':'')+'>Save</button></div>';
+  var keep={};['.dlg-pane','.pr-pages'].forEach(function(q){var e=$(q);if(e) keep[q]=e.scrollTop;});
   $('#app').innerHTML=h;
+  Object.keys(keep).forEach(function(q){var e=$(q);if(e) e.scrollTop=keep[q];});
+  if(ui.pdfMenu) schedulePreview();
   if(ui.view==='tree') sizeTree();
   if(ui.view==='tree'&&ui.treeLayout==='outline') outlineLinks();
 }
@@ -1017,7 +1032,7 @@ function viewCalendar(){
   var evs=eventsBetween(r.s,r.e).filter(calFilter()),by={};
   evs.forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
   var h=calHeader(heb?mt.t:mt.t,heb?mt.he:'',heb?esc(mt.sub):esc(mt.sub)+' · <span class="he" dir="rtl" lang="he">'+esc(mt.he)+'</span>');
-  h+='<div class="cal-layout"><div style="overflow-x:auto"><div class="grid" role="grid">';
+  h+='<div class="cal-layout"><div style="overflow-x:auto"><div class="grid" role="grid"'+(heb?' dir="rtl"':'')+'>';
   WDS.forEach(function(w,i){h+='<div class="wdh">'+(i===6?'Shabbat':w)+'</div>';});
   for(var a=r.s;a<=r.e;a++){
     var g=gFromAbs(a),hd=H.fromAbs(a),out=a<r.a0||a>r.a1;
@@ -1067,7 +1082,7 @@ function viewYear(){
   var evs=eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(calFilter()),by={};
   evs.forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
   var h=calHeader(yt.t,yt.he,esc(yt.sub));
-  h+='<div class="ygrid">';
+  h+='<div class="ygrid"'+(heb?' dir="rtl"':'')+'>';
   ms.forEach(function(mo){
     h+='<section class="ymonth"><h3><span>'+esc(mo.t)+'</span><span class="he" dir="rtl" lang="he">'+esc(mo.he)+'</span></h3><div class="ysub">'+esc(mo.sub)+'</div><div class="mini">';
     WD1.forEach(function(w){h+='<span class="mh">'+w+'</span>';});
@@ -2255,6 +2270,7 @@ var PX_CSS='.px{--bg:#F1F3EF;--surface:#FFFFFF;--surface-2:#E7EBE5;--ink:#19222D
 '.px-cn{display:flex;justify-content:space-between;align-items:baseline;font-family:"Frank Ruhl Libre",Georgia,serif;font-size:15px}'+
 '.px-cn .h{font-family:"Assistant",sans-serif;font-size:11px;color:#77818D}'+
 '.px-ev{font-size:10px;line-height:1.25;margin-top:3px;padding-left:4px;border-left:3px solid #BCC4B9}'+
+'.px-cal[dir=rtl] .px-ev{padding-left:0;padding-right:4px;border-left:0;border-right:3px solid #BCC4B9}'+
 '.px-yg{display:grid;gap:14px 20px}'+
 '.px-ym .t{font-family:"Frank Ruhl Libre",Georgia,serif;font-size:15px;display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #D3D9D0;margin-bottom:3px}'+
 '.px-ym .t span{font-size:12px;color:#77818D}'+
@@ -2296,14 +2312,14 @@ function listBlocks(a0,a1,showWhen,byHebMonth,flt){
 function pxMonthGrid(width){
   var r=calRange(),heb=ui.calMode==='heb',by={},cellH=ui.orient==='portrait'?138:92;
   eventsBetween(r.s,r.e).filter(calFilter()).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
-  var h='<div class="px-cal" style="width:'+(width||976)+'px">';
+  var h='<div class="px-cal"'+(heb?' dir="rtl"':'')+' style="width:'+(width||976)+'px">';
   WDS.forEach(function(w,i){h+='<div class="px-wd">'+(i===6?'Shabbat':w)+'</div>';});
   for(var a=r.s;a<=r.e;a++){
     var g=gFromAbs(a),hd=H.fromAbs(a),out=a<r.a0||a>r.a1;
     var prim=heb?'<span class="he" dir="rtl" lang="he">'+esc(gem(hd.d))+'</span>':String(g.d);
     var sec=heb?(g.d===1||a===r.s?GMS[g.m-1]+' '+g.d:String(g.d)):'<span class="he" dir="rtl" lang="he">'+esc(hd.d===1?gem(1)+' '+hmName(hd.m,hd.y,true):gem(hd.d))+'</span>';
     h+='<div class="px-cell'+(out?' out':'')+'" style="min-height:'+cellH+'px"><div class="px-cn">'+prim+'<span class="h">'+sec+'</span></div>';
-    (by[a]||[]).forEach(function(e){h+='<div class="px-ev" style="border-left-color:'+KHEX[kkey(e)]+'">'+evShort(e)+(e.cal==='heb'&&e.kind!=='holiday'&&!heb?' (א)':'')+'</div>';});
+    (by[a]||[]).forEach(function(e){h+='<div class="px-ev" style="'+(heb?'border-right-color:':'border-left-color:')+KHEX[kkey(e)]+'">'+evShort(e)+(e.cal==='heb'&&e.kind!=='holiday'&&!heb?' (א)':'')+'</div>';});
     h+='</div>';
   }
   return h+'</div>'+pxLegend();
@@ -2311,7 +2327,7 @@ function pxMonthGrid(width){
 function pxYearGlance(){
   var ms=yearMonths(),heb=ui.calMode==='heb',by={};
   eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(calFilter()).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
-  var cols=ui.orient==='portrait'?3:4,h='<div class="px-yg" style="grid-template-columns:repeat('+cols+',1fr)">';
+  var cols=ui.orient==='portrait'?3:4,h='<div class="px-yg"'+(heb?' dir="rtl"':'')+' style="grid-template-columns:repeat('+cols+',1fr)">';
   ms.forEach(function(mo){
     h+='<div class="px-ym"><div class="t">'+esc(mo.t)+'<span class="he" dir="rtl" lang="he">'+esc(mo.he)+'</span></div><div class="px-mini">';
     WD1.forEach(function(w){h+='<span class="w">'+w+'</span>';});
@@ -2403,38 +2419,48 @@ function makePdf(opts){
     var pdf=new window.jspdf.jsPDF({orientation:land?'landscape':'portrait',unit:'pt',format:[pw,ph]});
     pw=pdf.internal.pageSize.getWidth();ph=pdf.internal.pageSize.getHeight();
     /* sharpness: about 150 dots per inch on paper (300 in high quality), within what a browser can draw */
-    var dpi=o&&o.hq?300:150;
-    function scaleFor(pg,inchesWide){var w=pg.offsetWidth,h=pg.offsetHeight,sc=Math.max(2,inchesWide*dpi/w);return Math.min(sc,15000/Math.max(w,h),Math.sqrt(180e6/(w*h)));}
+    var dpi=o&&o.hq?300:150,pv=!!opts.preview;
+    function scaleFor(pg,inchesWide){var w=pg.offsetWidth,h=pg.offsetHeight;if(pv) return Math.min(1.25,2600/Math.max(w,h));var sc=Math.max(2,inchesWide*dpi/w);return Math.min(sc,15000/Math.max(w,h),Math.sqrt(180e6/(w*h)));}
+    /* a preview picture of one sheet: the paper's shape, with the content where the PDF puts it */
+    function sheet(src,x,y,w,h,label){
+      var PW=900,k=PW/pw,c=document.createElement('canvas');c.width=PW;c.height=Math.round(ph*k);var g=c.getContext('2d');
+      g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(src,x*k,y*k,w*k,h*k);
+      if(label){g.strokeStyle='#D2D2D2';g.lineWidth=1;g.strokeRect(x*k,y*k,w*k,h*k);g.fillStyle='#999';g.font='9px sans-serif';g.fillText(label,x*k,c.height-8);}
+      return c.toDataURL('image/jpeg',.85);
+    }
     function thumb(cv){var k=Math.min(1,1400/cv.width),t=document.createElement('canvas');t.width=Math.max(1,Math.round(cv.width*k));t.height=Math.max(1,Math.round(cv.height*k));t.getContext('2d').drawImage(cv,0,0,t.width,t.height);return t.toDataURL('image/jpeg',.85);}
     var q=o&&o.hq?0.95:0.92,previews=[],count=0,chain=Promise.resolve();
     if(split){
       /* one big picture, cut into tiles: 'split' pages across, as many rows as it takes */
       var m=0.35*72,tw=pw-2*m,th=ph-2*m;
-      chain=window.html2canvas(pages[0],{scale:scaleFor(pages[0],split*tw/72),backgroundColor:'#ffffff',logging:false,useCORS:true}).then(function(cv){
+      chain=window.html2canvas(pages[0],{scale:pv?Math.min(1.25,2600/Math.max(pages[0].offsetWidth,pages[0].offsetHeight)):scaleFor(pages[0],split*tw/72),backgroundColor:'#ffffff',logging:false,useCORS:true}).then(function(cv){
         var ptPx=split*tw/cv.width,tpw=cv.width/split,tph=th/ptPx,rows=Math.ceil(cv.height/tph-0.01);
         for(var r=0;r<rows;r++) for(var c=0;c<split;c++){
           var hpx=Math.min(tph,cv.height-r*tph),t=document.createElement('canvas');t.width=Math.round(tpw);t.height=Math.round(tph);
           var g=t.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,t.width,t.height);g.drawImage(cv,c*tpw,r*tph,tpw,hpx,0,0,tpw,hpx);
+          var lab='Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+' — trim along the grey line and tape the pages together';
+          if(pv){previews.push(sheet(t,m,m,tw,th,lab));count++;continue;}
           if(count) pdf.addPage([pw,ph],land?'landscape':'portrait');
           pdf.addImage(t.toDataURL('image/jpeg',q),'JPEG',m,m,tw,th);
           pdf.setDrawColor(210);pdf.setLineWidth(.5);pdf.rect(m,m,tw,th);
-          pdf.setFontSize(7);pdf.setTextColor(150);pdf.text('Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+' — trim along the grey line and tape the pages together',m,ph-m/2);
-          previews.push(thumb(t));count++;
+          pdf.setFontSize(7);pdf.setTextColor(150);pdf.text(lab,m,ph-m/2);
+          count++;
         }
       });
     } else {
       pages.forEach(function(pg,j){
-        chain=chain.then(function(){return window.html2canvas(pg,{scale:spec.fit&&o?scaleFor(pg,pin[0]):2,backgroundColor:'#ffffff',logging:false,useCORS:true});}).then(function(cv){
+        chain=chain.then(function(){return window.html2canvas(pg,{scale:pv?Math.min(1.25,2600/Math.max(pg.offsetWidth,pg.offsetHeight)):spec.fit&&o?scaleFor(pg,pin[0]):2,backgroundColor:'#ffffff',logging:false,useCORS:true});}).then(function(cv){
+          var r=Math.min(pw/cv.width,ph/cv.height),w=cv.width*r,hh=cv.height*r,px0=(pw-w)/2,py0=spec.fit?Math.max(0,(ph-hh)/2):0;
+          if(pv){previews.push(sheet(cv,px0,py0,w,hh));count++;return;}
           if(j>0) pdf.addPage([pw,ph],land?'landscape':'portrait');
-          var r=Math.min(pw/cv.width,ph/cv.height),w=cv.width*r,hh=cv.height*r;
-          pdf.addImage(cv.toDataURL('image/jpeg',q),'JPEG',(pw-w)/2,spec.fit?Math.max(0,(ph-hh)/2):0,w,hh);
-          previews.push(thumb(cv));count++;
+          pdf.addImage(cv.toDataURL('image/jpeg',q),'JPEG',px0,py0,w,hh);
+          count++;
         });
       });
     }
     return chain.then(function(){
       var name=(data.meta.familyName+' - '+spec.file+(o&&o.paper!=='letter'?' ('+PAPERS[o.paper][2].replace(/ in$/,'')+')':'')).replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
-      return {blob:pdf.output('blob'),name:name,pages:count,previews:previews,cols:split||1};
+      return {blob:pv?null:pdf.output('blob'),name:name,pages:count,previews:previews,cols:split||1};
     });
   }).then(function(r){if(stage) stage.remove();window.scrollTo(0,sy);return r;},function(err){if(stage) stage.remove();window.scrollTo(0,sy);throw err;});
 }
@@ -2447,13 +2473,54 @@ var WALL_SIZES={'18x24':[24,18,'18 × 24 in (ARCH C)'],'24x36':[36,24,'24 × 36 
 var PRINT_TABS=[['tree','Family tree'],['calendar','Calendar'],['upcoming','Upcoming dates'],['people','Family directory']];
 function printDialog(){
   var cur=PRINT_TABS.some(function(x){return x[0]===ui.printTab;})?ui.printTab:'tree';
-  var h='<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="prt-t"><div class="dlg-box"><div class="dlg-head"><h2 id="prt-t">Print / PDF</h2><button class="btn sm ghost" data-act="pdf-menu" aria-label="Close">Close ✕</button></div>';
+  var h='<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="prt-t"><div class="dlg-box wide"><div class="dlg-head"><h2 id="prt-t">Print / PDF</h2><button class="btn sm ghost" data-act="pdf-menu" aria-label="Close">Close ✕</button></div>';
   h+='<div class="dlg-main"><nav class="dlg-nav" role="tablist" aria-label="What to print">';
   PRINT_TABS.forEach(function(t){h+='<button role="tab" data-act="print-tab" data-t="'+t[0]+'" aria-selected="'+(t[0]===cur)+'">'+t[1]+'</button>';});
-  return h+'</nav><div class="dlg-pane" role="tabpanel">'+printPane(cur)+'</div></div></div></div>';
+  return h+'</nav><div class="dlg-pane pr-opts" role="tabpanel">'+printPane(cur)+'</div><div class="pr-view" id="pr-view" aria-label="Preview">'+printViewHTML()+'</div></div></div></div>';
+}
+/* What the window is set to print right now */
+function printKind(){var t=PRINT_TABS.some(function(x){return x[0]===ui.printTab;})?ui.printTab:'tree';return t==='calendar'?(ui.calKind||'month'):t;}
+var dataVer=0,pvTimer=null,pvSeq=0;
+function printKey(){var k=printKind();return JSON.stringify([k,k==='tree'?[tpdf(),ui.treeLayout,ui.treeStyle,currentRoot()]:0,ui.orient,ui.calMode,ui.hCur,ui.gCur,prefs.kinds,prefs.greg,prefs.heb,ui.calWho,ui.horizon,k==='wall'?lsGet('fl-wall','24x36'):0,dataVer,data.meta.familyName]);}
+/* The preview follows every change: a moment after the last one it is made again. */
+function schedulePreview(){
+  var key=printKey();if(ui.pv&&ui.pv.key===key) return;
+  ui.pv=Object.assign(ui.pv||{},{key:key,busy:true,err:false});paintPreview();
+  clearTimeout(pvTimer);var seq=++pvSeq;
+  pvTimer=setTimeout(function(){
+    makePdf({kind:printKind(),size:lsGet('fl-wall','24x36'),preview:true}).then(function(out){
+      if(seq!==pvSeq||!ui.pdfMenu) return;
+      if(ui.pv&&ui.pv.url) URL.revokeObjectURL(ui.pv.url);
+      ui.pv={key:key,out:out};paintPreview();
+    },function(){if(seq!==pvSeq) return;ui.pv={key:key,err:true};paintPreview();});
+  },350);
+}
+function paintPreview(){var el=$('#pr-view');if(el){var sc=el.querySelector('.pr-pages'),top=sc?sc.scrollTop:0;el.innerHTML=printViewHTML();sc=el.querySelector('.pr-pages');if(sc) sc.scrollTop=top;}}
+function printViewHTML(){
+  var pv=ui.pv||{},o=pv.out;
+  var h='<div class="pr-bar"><span class="note">'+(pv.busy||!o?'Updating the preview…':(o.pages+(o.pages===1?' page':' pages')+(o.cols>1?' · tape them together '+o.cols+' across':'')))+'</span>';
+  h+='<button class="btn sm primary" data-act="print-save"'+(exporting||!o?' disabled':'')+'>'+(exporting?'Preparing…':'Save PDF')+'</button></div><div class="pr-pages'+(pv.busy?' busy':'')+'">';
+  if(pv.err) h+='<p class="err">Couldn’t make the preview. Try changing an option.</p>';
+  else if(o&&o.previews&&o.previews.length){
+    var im=o.previews.map(function(u,i){return '<img src="'+u+'" alt="Page '+(i+1)+'">';}).join('');
+    h+=o.cols>1?'<div class="pvw-grid" style="grid-template-columns:repeat('+o.cols+',1fr)">'+im+'</div>':im;
+  } else if(o&&o.blob){if(!pv.url) pv.url=URL.createObjectURL(o.blob);h+='<iframe class="pvw-frame" src="'+pv.url+'#toolbar=0&navpanes=0&view=Fit" title="Wall calendar preview"></iframe>';}
+  else h+='<p class="note">Preparing the preview…</p>';
+  return h+'</div>';
+}
+/* Save PDF: the full-quality file (the wall calendar's preview already is it) */
+function printSave(){
+  if(exporting) return;exporting=true;paintPreview();
+  var pv=ui.pv,kind=printKind(),p=kind==='wall'&&pv&&pv.out&&pv.out.blob&&pv.key===printKey()?Promise.resolve(pv.out):makePdf({kind:kind,size:lsGet('fl-wall','24x36')});
+  p.then(function(out){return saveFile(out.name,out.blob,'application/pdf');}).then(function(){toast('PDF saved.');},function(e){
+    var c=e&&e.code;
+    if(c==='declined') toast('Export cancelled.');
+    else if(c==='rate_limited') toast('A save prompt is already open.');
+    else if(c==='unavailable'||c==='not_granted'||c==='capability_disabled'||c==='capability_removed') toast('PDF export isn’t available in this view.');
+    else toast('Couldn’t make the PDF. Try again.');
+  }).then(function(){exporting=false;paintPreview();});
 }
 function orientRow(){var por=ui.orient==='portrait';return '<div class="row"><span class="flab">Page</span><div class="seg" role="group" aria-label="Page orientation"><button data-act="orient" data-o="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="orient" data-o="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';}
-function goBtn(kind,label,primary){return '<button class="btn sm'+(primary===false?'':' primary')+'" data-act="pdf" data-kind="'+kind+'"'+(exporting?' disabled':'')+'>'+(exporting?'Preparing…':label)+'</button>';}
 function printPane(t){
   var h='',heb=ui.calMode==='heb';
   var hebSeg='<div class="seg" role="group" aria-label="Calendar"><button data-act="calmode" data-m="greg" aria-pressed="'+!heb+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+heb+'">Hebrew</button></div>';
@@ -2476,27 +2543,29 @@ function printPane(t){
     h+='</select></div><div class="row"><span class="flab">Quality</span>'+cb('hq','High quality — sharper, for a print shop (bigger file)')+'</div></div>';
     h+='<div class="sec tpo"><b>Heading</b><div class="row"><label class="flab" for="tp-title">Title</label><input class="inp" id="tp-title" data-tpdf="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div><div class="row"><span class="flab">Show</span>'+cb('date','Printed date')+cb('foot','Page footer')+cb('legend','Legend of the lines')+'</div></div>';
     h+='<div class="sec tpo"><b>On the cards</b><div class="row">'+cb('en','English names')+cb('dates','Dates & ages')+cb('hebd','Hebrew birth dates')+cb('counts','Children & grandchildren')+cb('yz','Yahrzeits')+'</div></div>';
-    return h+'<div class="row">'+goBtn('tree','Preview the family tree')+'</div>';
+    return h;
   }
   if(t==='calendar'){
     var mt=monthTitle(),yt=yearTitle(),cw=lsGet('fl-wall','24x36');
-    h='<h3>Calendar</h3><p class="lead">Uses the dates chosen here and on the Calendar tab.</p>';
+    h='<h3>Calendar</h3><p class="lead">Uses the dates chosen here and on the Calendar tab. In Hebrew everything reads right to left.</p>';
     h+='<div class="sec"><b>What to include</b><div class="row"><span class="flab">Calendar</span>'+hebSeg+'</div>'+filtersHTML()+whoHTML('p-who')+orientRow()+'</div>';
-    h+='<div class="sec"><b>One month</b><p>One page, with the names written in each day.</p><div class="row"><button class="btn sm ghost" data-act="p-month" data-d="-1" aria-label="Previous month">‹</button><b>'+esc(mt.t)+'</b><button class="btn sm ghost" data-act="p-month" data-d="1" aria-label="Next month">›</button>'+goBtn('month','Preview this month')+'</div></div>';
-    h+='<div class="sec"><b>A whole year</b><p>Small months, with every name listed below.</p><div class="row"><button class="btn sm ghost" data-act="p-year" data-d="-1" aria-label="Previous year">‹</button><b>'+esc(yt.t)+'</b><button class="btn sm ghost" data-act="p-year" data-d="1" aria-label="Next year">›</button>'+goBtn('year','Preview this year')+'</div></div>';
-    h+='<div class="sec"><b>Wall calendar</b><p>All of '+esc(yt.t)+' on one large sheet — every day has its own box with that day’s names inside it. Made for a plotter or print shop.</p><div class="row"><label class="flab" for="wall-size">Sheet size</label><select class="sel" id="wall-size">';
-    Object.keys(WALL_SIZES).forEach(function(k){h+='<option value="'+k+'"'+(k===cw?' selected':'')+'>'+WALL_SIZES[k][2]+'</option>';});
-    return h+'</select>'+goBtn('wall','Preview wall calendar')+'</div></div>';
+    var ck=ui.calKind||'month',kseg=function(k,l){return '<button data-act="print-kind" data-k="'+k+'" aria-pressed="'+(ck===k)+'">'+l+'</button>';};
+    h=h.replace('<div class="sec"><b>What to include</b>','<div class="sec"><b>What to print</b><div class="row"><div class="seg" role="group" aria-label="Calendar kind">'+kseg('month','One month')+kseg('year','A whole year')+kseg('wall','Wall calendar')+'</div></div>'
+      +(ck==='month'?'<div class="row"><button class="btn sm ghost" data-act="p-month" data-d="-1" aria-label="Previous month">‹</button><b>'+esc(mt.t)+'</b><button class="btn sm ghost" data-act="p-month" data-d="1" aria-label="Next month">›</button><span class="note">one page, names in each day</span></div>'
+       :'<div class="row"><button class="btn sm ghost" data-act="p-year" data-d="-1" aria-label="Previous year">‹</button><b>'+esc(yt.t)+'</b><button class="btn sm ghost" data-act="p-year" data-d="1" aria-label="Next year">›</button><span class="note">'+(ck==='year'?'small months, names listed below':'one large sheet for a plotter or print shop')+'</span></div>')
+      +(ck==='wall'?'<div class="row"><label class="flab" for="wall-size">Sheet size</label><select class="sel" id="wall-size" data-act-change="wall-size">'+Object.keys(WALL_SIZES).map(function(k){return '<option value="'+k+'"'+(k===cw?' selected':'')+'>'+WALL_SIZES[k][2]+'</option>';}).join('')+'</select></div>':'')
+      +'</div><div class="sec"><b>What to include</b>');
+    return h;
   }
   if(t==='upcoming'){
     h='<h3>Upcoming dates</h3><p class="lead">A list of the coming birthdays, anniversaries and yahrzeits.</p>';
     h+='<div class="sec"><b>What to include</b><div class="row"><label class="flab" for="p-horizon">How far ahead</label><select class="sel" id="p-horizon" data-act-change="p-horizon">';
     [[30,'The next 30 days'],[90,'The next 90 days'],[180,'The next 6 months'],[365,'The next year']].forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.horizon===x[0]?' selected':'')+'>'+x[1]+'</option>';});
     if([30,90,180,365].indexOf(ui.horizon)<0) h+='<option value="'+ui.horizon+'" selected>The next '+ui.horizon+' days</option>';
-    return h+'</select></div>'+filtersHTML()+orientRow()+'</div><div class="row">'+goBtn('upcoming','Preview upcoming dates')+'</div>';
+    return h+'</select></div>'+filtersHTML()+orientRow()+'</div>';
   }
   h='<h3>Family directory</h3><p class="lead">Everyone in the family, by last name: Hebrew and English names, birth dates, ages, husband or wife, children and grandchildren.</p>';
-  return h+'<div class="sec"><b>Paper</b>'+orientRow()+'</div><div class="row">'+goBtn('people','Preview the family directory')+'</div>';
+  return h+'<div class="sec"><b>Paper</b>'+orientRow()+'</div>';
 }
 var HEB=/[֐-׿]/,STRONG=/[A-Za-zÀ-ɏ֐-׿]/;
 function rgb(h){h=h.replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -2644,15 +2713,17 @@ function makeWall(size){
     /* months */
     var top=M+headH+G;
     ms.forEach(function(mo,mi){
-      var x0=M+(mi%C)*(mW+G),y0=top+Math.floor(mi/C)*(mH+G),yd=y0+tH+wdH;
+      /* in Hebrew everything reads right to left: the months, the days of the week, the days */
+      var col=function(i){return heb?6-i:i;},mc=heb?C-1-(mi%C):mi%C;
+      var x0=M+mc*(mW+G),y0=top+Math.floor(mi/C)*(mH+G),yd=y0+tH+wdH;
       fill(INK);pdf.rect(x0,y0,mW,tH,'F');
-      T.draw([{t:mo.t,c:'#FFFFFF',b:true}],x0+tH*0.35,y0+tH*0.7,tH*0.58,'left');
-      T.draw([{t:mo.he,c:'#D3D9D0',b:true}],x0+mW-tH*0.35,y0+tH*0.7,tH*0.5,'right');
+      if(heb){T.draw([{t:mo.he,c:'#FFFFFF',b:true}],x0+mW-tH*0.35,y0+tH*0.7,tH*0.58,'right');T.draw([{t:mo.t,c:'#D3D9D0',b:true}],x0+tH*0.35,y0+tH*0.7,tH*0.5,'left');}
+      else{T.draw([{t:mo.t,c:'#FFFFFF',b:true}],x0+tH*0.35,y0+tH*0.7,tH*0.58,'left');T.draw([{t:mo.he,c:'#D3D9D0',b:true}],x0+mW-tH*0.35,y0+tH*0.7,tH*0.5,'right');}
       fill('#E7EBE5');pdf.rect(x0,y0+tH,mW,wdH,'F');
-      WDS.forEach(function(w,i){T.draw([{t:i===6?'Shabbat':w,c:INK2,b:true}],x0+(i+0.5)*dW,y0+tH+wdH*0.72,wdH*0.58,'center');});
+      WDS.forEach(function(w,i){T.draw([{t:i===6?'Shabbat':w,c:INK2,b:true}],x0+(col(i)+0.5)*dW,y0+tH+wdH*0.72,wdH*0.58,'center');});
       var lead=dow(mo.a0),last=lead+(mo.a1-mo.a0);
       for(var c=0;c<42;c++){
-        var cx=x0+(c%7)*dW,cy=yd+Math.floor(c/7)*dH;
+        var cx=x0+col(c%7)*dW,cy=yd+Math.floor(c/7)*dH;
         if(c<lead||c>last){fill('#FAFBF9');pdf.rect(cx,cy,dW,dH,'F');}
         else if(c%7===6){fill('#F4F6F3');pdf.rect(cx,cy,dW,dH,'F');}
       }
@@ -2661,12 +2732,12 @@ function makeWall(size){
       for(k=1;k<6;k++) pdf.line(x0,yd+k*dH,x0+mW,yd+k*dH);
       stroke(INK,1.1);pdf.rect(x0,y0,mW,mH,'S');
       for(var a=mo.a0;a<=mo.a1;a++){
-        var ci=lead+(a-mo.a0),dx=x0+(ci%7)*dW,dy=yd+Math.floor(ci/7)*dH;
+        var ci=lead+(a-mo.a0),dx=x0+col(ci%7)*dW,dy=yd+Math.floor(ci/7)*dH;
         var g=gFromAbs(a),hd=H.fromAbs(a);
         var main=heb?gem(hd.d):String(g.d);
         var small=heb?(g.d===1||a===mo.a0?GMS[g.m-1]+' '+g.d:String(g.d)):(hd.d===1?gem(1)+' '+hmName(hd.m,hd.y,true):gem(hd.d));
-        T.draw([{t:main,b:true}],dx+3.5,dy+nfs*1.05,nfs,'left');
-        T.draw([{t:small,c:INK3}],dx+dW-3.5,dy+nfs*1.05,fs*0.9,'right');
+        if(heb){T.draw([{t:main,b:true}],dx+dW-3.5,dy+nfs*1.05,nfs,'right');T.draw([{t:small,c:INK3}],dx+3.5,dy+nfs*1.05,fs*0.9,'left');}
+        else{T.draw([{t:main,b:true}],dx+3.5,dy+nfs*1.05,nfs,'left');T.draw([{t:small,c:INK3}],dx+dW-3.5,dy+nfs*1.05,fs*0.9,'right');}
         var list=by[a]||[];if(!list.length) continue;
         var ey=dy+nfs*1.05+fs*0.55,avail=dy+dH-3-ey,innerW=dW-7-5;
         /* Names are never cut: each entry wraps onto as many lines as it needs, and a crowded day
@@ -2688,14 +2759,14 @@ function makeWall(size){
         });
         var yy=ey;
         shown.forEach(function(b){
-          if(b.hol){T.drawLine(b.lines[0],dx+3.5,yy+plan.lh*0.82,plan.s,'left');yy+=b.h+2;return;}
+          if(b.hol){T.drawLine(b.lines[0],heb?dx+dW-3.5:dx+3.5,yy+plan.lh*0.82,plan.s,heb?'right':'left');yy+=b.h+2;return;}
           var key=kkey(b.e);
           fill(KTINT[key]);pdf.rect(dx+3.5,yy,dW-7,b.h,'F');
-          fill(KHEX[key]);pdf.rect(dx+3.5,yy,2.4,b.h,'F');
-          b.lines.forEach(function(line,li){T.drawLine(line,dx+3.5+5,yy+1+plan.lh*(li+0.8),plan.s,'left');});
+          fill(KHEX[key]);pdf.rect(heb?dx+dW-3.5-2.4:dx+3.5,yy,2.4,b.h,'F');
+          b.lines.forEach(function(line,li){T.drawLine(line,heb?dx+dW-3.5-5:dx+3.5+5,yy+1+plan.lh*(li+0.8),plan.s,heb?'right':'left');});
           yy+=b.h+2;
         });
-        if(hidden) T.draw([{t:'+'+hidden+' more',c:INK3}],dx+3.5+5,yy+plan.lh*0.8,plan.s*0.9,'left');
+        if(hidden) T.draw([{t:'+'+hidden+' more',c:INK3}],heb?dx+dW-3.5-5:dx+3.5+5,yy+plan.lh*0.8,plan.s*0.9,heb?'right':'left');
       }
     });
     var name=(data.meta.familyName+' - Wall calendar '+yt.t+(calWho()?' - '+primaryText(calWho()):'')+' ('+dims[1]+'x'+dims[0]+' in'+(por?', portrait':'')+')').replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
@@ -3027,7 +3098,7 @@ function importData(file){
 
 /* ---------- Save / publish ---------- */
 var PKEY='family-luach-pending';
-function markDirty(){reindex();dirty=JSON.stringify(data)!==JSON.stringify(saved);try{if(dirty) sessionStorage.setItem(PKEY,JSON.stringify(data));else sessionStorage.removeItem(PKEY);}catch(e){}}
+function markDirty(){dataVer++;reindex();dirty=JSON.stringify(data)!==JSON.stringify(saved);try{if(dirty) sessionStorage.setItem(PKEY,JSON.stringify(data));else sessionStorage.removeItem(PKEY);}catch(e){}}
 function restorePending(){
   try{
     var s=sessionStorage.getItem(PKEY);if(!s) return;
@@ -3105,8 +3176,10 @@ document.addEventListener('click',function(e){
       try{navigator.clipboard.writeText(url).then(function(){toast('Address copied.');},function(){toast('Select the address and copy it.');});}catch(err){toast('Select the address and copy it.');}
       break;
     case 'orient':ui.orient=t.dataset.o;lsSet('fl-orient',ui.orient);render();break;
-    case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;if(ui.pdfMenu) ui.printTab={calendar:'calendar',upcoming:'upcoming',people:'people'}[ui.view]||'tree';render();break;
+    case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;if(ui.pv&&ui.pv.url) URL.revokeObjectURL(ui.pv.url);ui.pv=null;if(ui.pdfMenu) ui.printTab={calendar:'calendar',upcoming:'upcoming',people:'people'}[ui.view]||'tree';render();break;
     case 'print-tab':ui.printTab=t.dataset.t;render();break;
+    case 'print-kind':ui.calKind=t.dataset.k;render();break;
+    case 'print-save':printSave();break;
     case 'p-month':var dm=+t.dataset.d;if(ui.calMode==='heb') ui.hCur=dm>0?hNext(ui.hCur):hPrev(ui.hCur);else{var gm=ui.gCur.m+dm;ui.gCur={y:ui.gCur.y+(gm>12?1:gm<1?-1:0),m:gm>12?1:gm<1?12:gm};}render();break;
     case 'p-year':var dy=+t.dataset.d;if(ui.calMode==='heb') ui.hCur={y:ui.hCur.y+dy,m:ui.hCur.m===13&&!H.leap(ui.hCur.y+dy)?12:ui.hCur.m};else ui.gCur={y:ui.gCur.y+dy,m:ui.gCur.m};render();break;
     case 'pdf-save':savePrev();break;
@@ -3223,7 +3296,7 @@ document.addEventListener('click',function(e){
 });
 document.addEventListener('keydown',function(e){
   if(e.key==='Escape'&&!drawer&&ui.pdfPrev){closePrev();render();return;}
-  if(e.key==='Escape'&&!drawer&&ui.pdfMenu){ui.pdfMenu=false;render();return;}
+  if(e.key==='Escape'&&!drawer&&ui.pdfMenu){ui.pdfMenu=false;if(ui.pv&&ui.pv.url) URL.revokeObjectURL(ui.pv.url);ui.pv=null;render();return;}
   if(e.key==='Escape'&&!drawer&&ui.panel){ui.panel=null;render();return;}
   if(e.key==='Escape'&&drawer){if(drawer.mode==='edit'&&drawer.draft.id){drawer={mode:'view',pid:drawer.draft.id};renderDrawer();}else closeDrawer();}
   if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('li[data-act]')){e.preventDefault();e.target.click();}
@@ -3246,11 +3319,12 @@ document.addEventListener('change',function(e){
   if(t.id==='f-father'||t.id==='f-mother'){refreshHebPreview();return;}
   if(/^m-sp-\d+$/.test(t.id)){var nm=$('#m-nm-'+t.id.slice(5));if(nm) nm.hidden=!!t.value;return;}
   if(t.id==='import-file'&&t.files&&t.files[0]){importData(t.files[0]);t.value='';return;}
-  if(t.dataset&&t.dataset.tpdf){var to=tpdf(),tk=t.dataset.tpdf;to[tk]=t.type==='checkbox'?t.checked:(tk==='split'?(+t.value||0):t.value);lsSet('fl-tpdf',to);return;}
+  if(t.dataset&&t.dataset.tpdf){var to=tpdf(),tk=t.dataset.tpdf;to[tk]=t.type==='checkbox'?t.checked:(tk==='split'?(+t.value||0):t.value);lsSet('fl-tpdf',to);if(ui.pdfMenu) schedulePreview();return;}
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;setCalWho(t.value);ui.zoomFit=true;render();}
   if(a==='cal-who'){setCalWho(t.value);render();}
   if(a==='p-horizon'){ui.horizon=+t.value||90;render();}
+  if(a==='wall-size'){lsSet('fl-wall',t.value);render();}
   if(a==='tree-switch'){switchTree(t.value);return;}
   if(a==='acct-branch'){acctBranch(+t.dataset.i,t.value);return;}
   if(a==='tree-style'){ui.treeStyle=t.value;lsSet('fl-tstyle',t.value);ui.zoomFit=true;render();}
