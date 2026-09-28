@@ -1236,8 +1236,7 @@ function marSegs(items,g,xs,sh,cls){
 function kidEdges(items,i0,ax,ay,ends,depth){
   /* db: how far below the start the parents' cards end (the branch drops that far before it curves) */
   for(var k=i0;k<items.length;k++){var it=items[k];if(it.t==='h'||it.t==='v'||it.t==='el') it.kid=1;}
-  /* e[2]: for a wrapped family's later rows, the point on the side line the branch runs down to (vdx, vdy) */
-  ends.forEach(function(e){var o={t:'edge',x:ax,y:ay,dx:e[0]-ax,dy:e[1]-ay,db:Math.max(0,TH-ay),d:depth};if(e[2]){o.vdx=e[2][0]-ax;o.vdy=e[2][1]-ay;}items.push(o);});
+  ends.forEach(function(e){items.push({t:'edge',x:ax,y:ay,dx:e[0]-ax,dy:e[1]-ay,db:Math.max(0,TH-ay),d:depth});});
 }
 function kidBars(items,xs,y,subs){subs.forEach(function(x,i){if(!x.stack) bar(items,xs[i]+0.75,y,'t');});}
 function marriageOrd(m){
@@ -1424,7 +1423,8 @@ function tsCSS(){
   /* Evening */
   c+='.ts-evening .tcard{border:1px solid #D4AF5A}.ts-evening .tcard.m,.ts-evening .tcard.f{border-top-width:1px;border-top-color:#D4AF5A}.ts-evening .fring{border:1px solid #D4AF5A;border-radius:50%;background:#14202E}.ts-evening .fring .fwed{background:#14202E}\n';
   /* Branches */
-  c+='.ts-branches .tcard{border:2px solid #7A5634;border-radius:50%;background:#FFFDF7;padding:10px 22px;overflow:visible}.ts-branches .tcard.dec{background:#F1E9DA}\n';
+  /* partly see-through frames, so a branch that passes behind one still shows */
+  c+='.ts-branches .tcard{border:2px solid #7A5634;border-radius:50%;background:rgba(255,253,247,.72);padding:10px 22px;overflow:visible}.ts-branches .tcard.dec{background:rgba(241,233,218,.72)}\n';
   c+='.ts-branches .tcard::before{content:"";position:absolute;top:4px;left:4px;right:4px;bottom:4px;border:1px solid #C9A66B;border-radius:50%;pointer-events:none}\n';
   c+='.ts-branches .tcard::after{content:"";position:absolute;top:-22px;left:50%;margin-left:-40px;width:80px;height:32px;background:'+sprout+' no-repeat center/contain;pointer-events:none}\n';
   c+='.ts-branches .fl-h.mar{border-top-width:2.5px}.ts-branches .fl-bar{display:none}.ts-branches .fring{background:#F7F2E7;border:1.2px solid #7A5634;border-radius:50%}.ts-branches .fring .fwed{background:rgba(247,242,231,.9)}\n';
@@ -1446,12 +1446,7 @@ function branchSVG(L,w,h){
     if(e.t!=='edge') return;
     var x1=e.x,y0=e.y+TPAD,x2=e.x+e.dx,y2=e.y+e.dy+TPAD,wd=Math.max(2.8,5.2-e.d*0.9);
     var y1=Math.min(y2-30,y0+(e.db||0)+12),p=[[x1,y1],[x1,y1+(y2-y1)*.55],[x2,y1+(y2-y1)*.45],[x2,y2]];
-    if(e.vdx!=null){
-      /* a later row of a wrapped family: over to the family's side line, down it, then into the child */
-      var vx=x1+e.vdx,vy=y0+e.vdy;p=[[vx,vy-10],[vx,vy+8],[x2,y2-27],[x2,y2]];
-      br+='<path d="M'+x1+' '+y0+'V'+y1+'C'+x1+' '+(y1+26)+' '+vx+' '+(y1+10)+' '+vx+' '+(y1+36)+'V'+(vy-10)+'C'+p[1].join(' ')+' '+p[2].join(' ')+' '+x2+' '+y2+'" stroke-width="'+wd.toFixed(1)+'"/>';
-    }
-    else br+='<path d="M'+x1+' '+y0+'V'+y1+'C'+p[1].join(' ')+' '+p[2].join(' ')+' '+x2+' '+y2+'" stroke-width="'+wd.toFixed(1)+'"/>';
+    br+='<path d="M'+x1+' '+y0+'V'+y1+'C'+p[1].join(' ')+' '+p[2].join(' ')+' '+x2+' '+y2+'" stroke-width="'+wd.toFixed(1)+'"/>';
     var len=Math.hypot(x2-x1,y2-y1),n=len<150?1:len<320?2:len<520?3:4;
     for(var i=0;i<n;i++){
       var t=n===1?.5:.3+i*.4/(n-1),q=pt(p,t),d=tan(p,t),a=Math.atan2(d[1],d[0])*180/Math.PI+(i%2?-48:48)+(x2<x1?180:0);
@@ -1619,7 +1614,7 @@ function layoutPack(id,seen,depth){
     /* a single parent's line starts at the bottom of their card (in open & close mode the − button sits there) */
     if(g.single!=null&&!(mode==='branch'&&depth>0)) bar(items,ax+0.75,TH,'b');
     styleLines(items,i0,g);
-    var ends=[];g.rows.forEach(function(r,ri){r.forEach(function(x){ends.push([g.L+x.ox+x.cx+sh,childY+r.oy,ri>0?[tx+0.75,rowY[ri]]:null]);});});
+    var ends=[];g.rows.forEach(function(r){r.forEach(function(x){ends.push([g.L+x.ox+x.cx+sh,childY+r.oy]);});});
     kidEdges(items,i0,ax,g.single!=null?TH:g.ly,ends,depth);
     if(mode==='branch'&&depth>0) items.push({t:'chip',x:ax,y:TH+2,k:g.key,open:true});
     ctPut(ct,g.ct,g.L+sh,2);
@@ -1739,7 +1734,7 @@ function mirrorTree(L){
     if(it.t==='card') it.x=W-it.x-TW;
     else if(it.t==='ring'||it.t==='chip') it.x=W-it.x;
     else if(it.t==='bar'){it.x=W-it.x;it.s={l:'r',r:'l'}[it.s]||it.s;}
-    else if(it.t==='edge'){it.x=W-it.x;it.dx=-it.dx;if(it.vdx!=null) it.vdx=-it.vdx;}
+    else if(it.t==='edge'){it.x=W-it.x;it.dx=-it.dx;}
     else if(it.t==='h') it.x=W-it.x-it.w;
     else if(it.t==='v') it.x=W-it.x-LW;
     else if(it.t==='el'){it.x=W-it.x-it.w;it.c=swap[it.c];}
