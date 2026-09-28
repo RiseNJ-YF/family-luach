@@ -568,7 +568,9 @@ function reindex(){
   Object.keys(spouses).forEach(function(k){spouses[k].sort(function(a,b){var x=a.m.date||'9999',y=b.m.date||'9999';return x<y?-1:x>y?1:0;});});
 }
 function byBirth(a,b){var pa=idx?idx.byId[a]:null,pb=idx?idx.byId[b]:null;var x=pa&&pa.birth||'9999',y=pb&&pb.birth||'9999';return x<y?-1:x>y?1:0;}
-function P(id){return idx.byId[id];}
+function P(id){var p=idx.byId[id];if(!p&&id&&String(id).indexOf('~c')>0) p=idx.byId[String(id).split('~c')[0]];return p;}
+function isCopyId(id){return String(id).indexOf('~c')>0;}
+function realId(id){return String(id).split('~c')[0];}
 /* English name, with the maiden name in parentheses: "Rivka Cohen (Levin)" */
 function fullName(p){return p?(([p.first,p.last].filter(Boolean).join(' ')||'Unnamed')+(p.maiden?' ('+p.maiden+')':'')):'Unknown';}
 function firstName(p){return p?(p.first||fullName(p)):'Unknown';}
@@ -1060,13 +1062,35 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
    (1st solid, 2nd dashed, 3rd dotted, 4th double). Children drop from their own marriage's label, in the
    gap just before that husband or wife, or from one parent's card when the other parent isn't in the row. */
 var TW=172,TH=124,SG=58,SIB=22,GG=44,VG=90,TPAD=24;
+/* When a woman married two relatives (e.g. two cousins), her real card sits with her current husband;
+   each earlier husband who is also a relative keeps his own place, with a lighter "married copy" of her
+   beside him (COPYWITH[husband] = wife). Worked out per tree, before laying it out. */
+var COPYWITH=null;
+function copyWithFor(root){
+  var inTree={},todo=chainOf(root,{});todo.forEach(function(x){inTree[x]=1;});
+  while(todo.length){var x=todo.pop();kidsOf(x).forEach(function(k){if(!inTree[k]){inTree[k]=1;todo.push(k);}});}
+  var rooted=function(id){var p=P(id);return !!p&&p.parents.some(function(q){return inTree[q];});};
+  var out={},any=false;
+  data.people.forEach(function(w){
+    if(w.gender!=='f'||!rooted(w.id)) return;
+    var hs=spousesOf(w.id).filter(function(sp){var h=P(sp.pid);return h&&h.gender==='m'&&rooted(sp.pid);});
+    if(hs.length<2) return;
+    var key=function(sp){return (sp.m.divorced?'0':'1')+(sp.m.date||'0000');};
+    var primary=hs.slice().sort(function(a,b){return key(a)<key(b)?1:key(a)>key(b)?-1:0;})[0];
+    hs.forEach(function(sp){if(sp!==primary){out[sp.pid]=w.id;any=true;}});
+  });
+  return any?out:null;
+}
 function chainOf(start,seen){
   var inC={};inC[start]=1;
-  function others(x){var o=spousesOf(x).map(function(s){return s.pid;}).filter(function(id){return !seen[id]&&!inC[id];});o.forEach(function(id){inC[id]=1;});return o;}
+  function split(x,id){return !!COPYWITH&&(COPYWITH[id]===x||COPYWITH[x]===id);}
+  function others(x){var o=spousesOf(x).map(function(s){return s.pid;}).filter(function(id){return !seen[id]&&!inC[id]&&!split(x,id);});o.forEach(function(id){inC[id]=1;});return o;}
   function expR(x){var o=others(x),out=[x];o.forEach(function(s){out=out.concat(expR(s));});return out;}
   /* Spouses to the right (the Hebrew-mode mirror puts them on the left), first marriage nearest. */
   var seq=[start];
   others(start).forEach(function(s){seq=seq.concat(expR(s));});
+  /* an earlier husband gets the married copy of his wife right after him */
+  if(COPYWITH) for(var i=seq.length-1;i>=0;i--){var w=COPYWITH[seq[i]];if(w&&!isCopyId(seq[i])) seq.splice(i+1,0,w+'~c'+seq[i]);}
   return seq;
 }
 /* Someone who already sits elsewhere in the tree, e.g. cousins who married each other (they sit next to
@@ -1159,7 +1183,11 @@ function wedLabel(m){
   var d=m&&!m.divorced?parseISO(m.date):null;if(!d) return '';
   return ui.calMode==='heb'?fmtHe(hebOf(m.date,m.sunset),false):fmtMD(d);
 }
-function wedHTML(m){var t=wedLabel(m);return t?(ui.calMode==='heb'?'<bdi dir="rtl" lang="he">'+esc(t)+'</bdi>':esc(t)):'';}
+function wedHTML(m){
+  var t=wedLabel(m);if(!t) return '';
+  if(ui.calMode==='heb') return '<bdi dir="rtl" lang="he">'+esc(t)+'<br>'+esc(gem(hebOf(m.date,m.sunset).y%1000))+'</bdi>';
+  return esc(t)+'<br>'+parseISO(m.date).y;
+}
 function marriageOrd(m){
   function ix(pid){var l=spousesOf(pid);if(l.length<2) return -1;for(var i=0;i<l.length;i++) if(l[i].m===m) return i;return -1;}
   var i=ix(m.a);if(i<0) i=ix(m.b);
@@ -1168,7 +1196,7 @@ function marriageOrd(m){
 function layoutFam(id,seen,depth){
   var chain=chainOf(id,seen);
   chain.forEach(function(x){seen[x]=1;if(TPLACED) TPLACED[x]=x===id?1:2;});
-  var pos={};chain.forEach(function(x,i){pos[x]=i;});
+  var pos={};chain.forEach(function(x,i){pos[x]=i;if(isCopyId(x)) pos[realId(x)]=i;});
   var marr=[],groups=[];
   data.marriages.forEach(function(m){
     if(pos[m.a]==null||pos[m.b]==null) return;
@@ -1179,7 +1207,7 @@ function layoutFam(id,seen,depth){
     marr.push(g);groups.push(g);
   });
   chain.forEach(function(x){
-    var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k]);});
+    var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k])&&!(COPYWITH&&P(k).parents.some(function(q){return COPYWITH[q]===x;}));});
     var gh=ghostsOf(kidsOf(x),pos,function(k){return !P(k).parents.some(function(q){return q!==x&&pos[q]!=null;});});
     ks.forEach(function(k){seen[k]=1;});
     if(ks.length||gh.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks,ghosts:gh});
@@ -1218,7 +1246,7 @@ function layoutFam(id,seen,depth){
   cl.forEach(function(c){var p=c.L;c.gs.forEach(function(g){g.L=p;p+=g.w+GG;});});
   var minX=Math.min(xs[0],groups.length?groups[0].L:Infinity),maxX=Math.max(xs[n-1]+TW,groups.length?groups[groups.length-1].L+groups[groups.length-1].w:-Infinity);
   var sh=-minX,items=[];
-  chain.forEach(function(x,i){items.push({t:'card',id:x,x:xs[i]+sh,y:0});});
+  chain.forEach(function(x,i){items.push({t:'card',id:x,x:xs[i]+sh,y:0,ghost:isCopyId(x)});});
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
     items.push({t:'h',x:x1,y:g.ly,w:x2-x1,cls:'mar ms'+g.st+(ended?' ended':'')});
@@ -1281,7 +1309,7 @@ function stackCol(ms){
 function layoutPack(id,seen,depth){
   var mode=ui.treeLayout,chain=chainOf(id,seen);
   chain.forEach(function(x){seen[x]=1;if(TPLACED) TPLACED[x]=x===id?1:2;});
-  var pos={};chain.forEach(function(x,i){pos[x]=i;});
+  var pos={};chain.forEach(function(x,i){pos[x]=i;if(isCopyId(x)) pos[realId(x)]=i;});
   var marr=[],groups=[];
   data.marriages.forEach(function(m){
     if(pos[m.a]==null||pos[m.b]==null) return;
@@ -1292,7 +1320,7 @@ function layoutPack(id,seen,depth){
     marr.push(g);groups.push(g);
   });
   chain.forEach(function(x){
-    var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k]);});
+    var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k])&&!(COPYWITH&&P(k).parents.some(function(q){return COPYWITH[q]===x;}));});
     var gh=ghostsOf(kidsOf(x),pos,function(k){return !P(k).parents.some(function(q){return q!==x&&pos[q]!=null;});});
     ks.forEach(function(k){seen[k]=1;});
     if(ks.length||gh.length) groups.push({single:x,i:pos[x],j:pos[x],kids:ks,ghosts:gh});
@@ -1358,7 +1386,7 @@ function layoutPack(id,seen,depth){
   open.forEach(function(g){g.ct.forEach(function(c){if(c){minX=Math.min(minX,g.L+c[0]);maxX=Math.max(maxX,g.L+c[1]);}});});
   groups.forEach(function(g){if(g.shut){minX=Math.min(minX,g.ax-CHW/2);maxX=Math.max(maxX,g.ax+CHW/2);}});
   var sh=-minX,items=[],ct=[];
-  chain.forEach(function(x,i){items.push({t:'card',id:x,x:xs[i]+sh,y:0});});
+  chain.forEach(function(x,i){items.push({t:'card',id:x,x:xs[i]+sh,y:0,ghost:isCopyId(x)});});
   ctAdd(ct,0,xs[0]+sh,xs[n-1]+TW+sh);
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
@@ -1436,7 +1464,7 @@ function outlineRows(root){
   var rows=[],seen={};
   function walk(id,depth,pass,elbow){
     var chain=chainOf(id,seen);chain.forEach(function(x){seen[x]=1;TPLACED[x]=x===id?1:2;});
-    var ip={};chain.forEach(function(x,i){ip[x]=i;});
+    var ip={};chain.forEach(function(x,i){ip[x]=i;if(isCopyId(x)) ip[realId(x)]=i;});
     var groups=[];
     data.marriages.forEach(function(m){
       if(ip[m.a]==null||ip[m.b]==null) return;
@@ -1445,7 +1473,7 @@ function outlineRows(root){
       g.kids.forEach(function(k){seen[k]=1;});groups.push(g);
     });
     chain.forEach(function(x){
-      var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k]);});
+      var ks=kidsOf(x).filter(function(k){return !seen[k]&&!(FORCEG&&FORCEG[k])&&!(COPYWITH&&P(k).parents.some(function(q){return COPYWITH[q]===x;}));});
       var gh=ghostsOf(kidsOf(x),ip,function(k){return !P(k).parents.some(function(q){return q!==x&&ip[q]!=null;});});
       ks.forEach(function(k){seen[k]=1;});if(ks.length||gh.length) groups.push({single:x,kids:ks,ghosts:gh});
     });
@@ -1472,7 +1500,9 @@ function outlineRows(root){
       });
     });
   }
-  TPLACED={};walk(root,0,[],null);var TP=TPLACED;TPLACED=null;
+  var own=!COPYWITH;if(own) COPYWITH=copyWithFor(root);
+  try{TPLACED={};walk(root,0,[],null);}finally{if(own) COPYWITH=null;}
+  var TP=TPLACED;TPLACED=null;
   if(!FORCEG){
     var fm=wivesToMove(rows.filter(function(r){return r.ghost;}).map(function(r){return r.ids[0];}),TP);
     if(fm){FORCEG=fm;try{return outlineRows(root);}finally{FORCEG=null;}}
@@ -1510,14 +1540,15 @@ function outlineRowHTML(r,root,placed,pdf,copies){
   });
   h+=r.ids.map(function(id,i){
     var ring=i<r.ids.length-1?'<span class="oring">'+(r.rw&&r.rw[i]?'<span class="owed">'+r.rw[i]+'</span>':'')+'⚭'+(r.rl[i]?'<small>'+r.rl[i]+'</small>':'')+'</span>':'';
-    return tcard(P(id),id===root,placed,pdf,r.ghost,!r.ghost&&i>0&&copies&&copies[id]?{act:'goto-copy'}:null)+ring;
+    var cp=r.ghost||isCopyId(id);
+    return tcard(P(id),id===root,placed,pdf,cp,!cp&&i>0&&copies&&copies[id]?{act:'goto-copy'}:null)+ring;
   }).join('');
   return h+'</div>';
 }
 function outlineParts(root,pdf){
   var rows=outlineRows(root),placed={};
   var copies={};
-  rows.forEach(function(r){if(r.ghost) copies[r.ids[0]]=1;else (r.ids||[]).forEach(function(id){placed[id]=1;});});
+  rows.forEach(function(r){if(r.ghost) copies[r.ids[0]]=1;else (r.ids||[]).forEach(function(id){if(isCopyId(id)) copies[realId(id)]=1;else placed[id]=1;});});
   return rows.map(function(r){return outlineRowHTML(r,root,placed,pdf,copies);});
 }
 function currentRoot(){var roots=treeRoots();return ui.treeRoot&&P(ui.treeRoot)?ui.treeRoot:(roots[0]?roots[0].id:data.people[0].id);}
@@ -1537,12 +1568,14 @@ function mirrorTree(L){
 function treeMarkup(root,pdf){
   if(ui.treeLayout==='outline') return '<div class="ftree otree'+(ui.calMode==='heb'?' rtl':'')+'">'+outlineParts(root,pdf).join('')+'</div>';
   var run=function(){TPLACED={};var l=ui.treeLayout==='classic'?layoutFam(root,{},0):layoutPack(root,{},0),tp=TPLACED;TPLACED=null;return [l,tp];};
+  COPYWITH=copyWithFor(root);
   var R1=run(),fm=wivesToMove(R1[0].items.filter(function(i){return i.t==='card'&&i.ghost;}).map(function(i){return i.id;}),R1[1]);
   if(fm){FORCEG=fm;try{R1=run();}finally{FORCEG=null;}}
+  COPYWITH=null;
   var L=R1[0],TP=R1[1],placed={},h='';
   /* The real card of someone who also has a linked copy (or whose parents' branch is closed) links back. */
   var cards={},copies={},notes={};
-  L.items.forEach(function(it){if(it.t==='card'){if(it.ghost) copies[it.id]=1;else cards[it.id]=1;}});
+  L.items.forEach(function(it){if(it.t==='card'){if(it.ghost) copies[realId(it.id)]=1;else cards[it.id]=1;}});
   /* everyone below the top of this tree (their parents may sit in a closed branch) */
   var inTree={},todo=chainOf(root,{});todo.forEach(function(x){inTree[x]=1;});
   while(todo.length){var x=todo.pop();kidsOf(x).forEach(function(k){if(!inTree[k]){inTree[k]=1;todo.push(k);}});}
@@ -1556,7 +1589,7 @@ function treeMarkup(root,pdf){
   var links='',lk={};
   L.items.forEach(function(g){
     if(g.t!=='card'||!g.ghost) return;
-    var r=L.items.filter(function(x){return x.t==='card'&&!x.ghost&&x.id===g.id;})[0];
+    var r=L.items.filter(function(x){return x.t==='card'&&!x.ghost&&x.id===realId(g.id);})[0];
     if(r){var row=Math.round(r.y);lk[row]=(lk[row]||0);links+=linkPath(g,r,L.items.filter(function(x){return x.t==='card';}),lk[row]++);}
   });
   h+=linkSVG(links,L.w,L.h+TPAD+4);
