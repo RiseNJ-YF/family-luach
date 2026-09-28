@@ -1437,6 +1437,13 @@ function branchSVG(L,w,h){
   function leafAt(x,y,a,s,c){var tr=' transform="translate('+x.toFixed(1)+' '+y.toFixed(1)+') rotate('+a.toFixed(0)+')"';return '<path d="M0 0C'+(s*.3).toFixed(1)+' '+(-s*.34).toFixed(1)+' '+(s*.7).toFixed(1)+' '+(-s*.34).toFixed(1)+' '+s+' 0C'+(s*.7).toFixed(1)+' '+(s*.34).toFixed(1)+' '+(s*.3).toFixed(1)+' '+(s*.34).toFixed(1)+' 0 0Z" fill="'+c+'"'+tr+'/>';}
   L.items.forEach(function(e){
     if(e.t!=='edge') return;
+    if(e.side){
+      /* down a stacked column, then curving into the side of the card, with a leaf where it turns */
+      var sx=e.x,sy=e.y+TPAD,ex=e.x+e.dx,ey=e.y+e.dy+TPAD,sd=ex>sx?1:-1;
+      br+='<path d="M'+sx+' '+sy+'V'+(ey-16)+'C'+sx+' '+(ey-5)+' '+(sx+(ex-sx)*.3)+' '+ey+' '+ex+' '+ey+'" stroke-width="3"/>';
+      lv+=leafAt(sx,ey-34,sd>0?200:-20,19,G[0])+leafAt(sx,ey-58,sd>0?-20:200,17,G[1]);
+      return;
+    }
     var x1=e.x,y0=e.y+TPAD,x2=e.x+e.dx,y2=e.y+e.dy+TPAD,wd=Math.max(2.8,5.2-e.d*0.9);
     var y1=Math.min(y2-30,y0+(e.db||0)+12),p=[[x1,y1],[x1,y1+(y2-y1)*.55],[x2,y1+(y2-y1)*.45],[x2,y2]];
     br+='<path d="M'+x1+' '+y0+'V'+y1+'C'+p[1].join(' ')+' '+p[2].join(' ')+' '+x2+' '+y2+'" stroke-width="'+wd.toFixed(1)+'"/>';
@@ -1459,8 +1466,9 @@ function branchOpen(key,depth){return ui.treeOpen[key]!=null?ui.treeOpen[key]:de
 /* Brothers/sisters with nobody below them, stacked in one column with a line down its side. */
 function stackCol(ms){
   var items=[],n=ms.length,hh=n*TH+(n-1)*STG,mid=function(j){return j*(TH+STG)+TH/2;};
-  items.push({t:'v',x:2,y:0,h:mid(n-1)});
-  ms.forEach(function(m,j){m.items.forEach(function(it){var c=Object.assign({},it);c.x+=STX;c.y+=j*(TH+STG);items.push(c);});items.push({t:'h',x:2,y:mid(j),w:STX-2});bar(items,STX,mid(j)+0.75,'l');});
+  items.push({t:'v',x:2,y:0,h:mid(n-1),kid:1});
+  ms.forEach(function(m,j){m.items.forEach(function(it){var c=Object.assign({},it);c.x+=STX;c.y+=j*(TH+STG);items.push(c);});items.push({t:'h',x:2,y:mid(j),w:STX-2,kid:1});bar(items,STX,mid(j)+0.75,'l');
+    items.push({t:'edge',side:1,x:2.75,y:0,dx:STX-2.75,dy:mid(j)+0.75,d:3});});
   var ct=[];ctBand(ct,0,hh,0,STX+TW);
   return {w:STX+TW,h:hh,cx:2,items:items,ct:ct,stack:true};
 }
