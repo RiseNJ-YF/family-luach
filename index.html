@@ -226,6 +226,10 @@ button:disabled{cursor:default;opacity:.6}
 .ftree .fl-el.bl{border-left-width:1.5px;border-bottom-width:1.5px}
 .ftree .fl-el.br{border-right-width:1.5px;border-bottom-width:1.5px}
 .ftree .fl-h.mar{border-top:2px solid var(--c-anniversary)}
+/* end bars: a short solid bar where a line meets its own card (a line with none just passes behind) */
+.ftree .fl-bar,.otree .obar{position:absolute;background:var(--line-2);border-radius:1.5px}
+.ftree .fl-bar.mar{background:var(--c-anniversary)}
+.ftree .fl-bar.mar.ended{background:var(--ink-3)}
 .ftree .fl-h.mar.ended{border-top:2px solid var(--ink-3)}
 .ftree .fl-h.ms1{border-top-style:dashed!important}.ftree .fl-v.ms1{border-left-style:dashed!important}.ftree .fl-el.ms1{border-style:dashed!important}
 .ftree .fl-h.ms2{border-top-style:dotted!important}.ftree .fl-v.ms2{border-left-style:dotted!important}.ftree .fl-el.ms2{border-style:dotted!important}
@@ -765,7 +769,7 @@ function outlineLinks(){
     if(!real) return;
     var G=loc(g),Q=loc(real),sx=heb?-1:1,x0=heb?G.l:G.r,x1=heb?Q.l:Q.r;
     var xv=heb?Math.min(G.l,Q.l)-18-n*8:Math.max(G.r,Q.r)+18+n*8,sy=Q.m>G.m?1:-1,rr=Math.min(R,Math.abs(Q.m-G.m)/2);n++;
-    paths+='<path d="M'+x0+' '+G.m+'L'+(xv-sx*rr)+' '+G.m+'Q'+xv+' '+G.m+' '+xv+' '+(G.m+sy*rr)+'L'+xv+' '+(Q.m-sy*rr)+'Q'+xv+' '+Q.m+' '+(xv-sx*rr)+' '+Q.m+'L'+x1+' '+Q.m+'"/>';
+    paths+='<path d="M'+x0+' '+G.m+'L'+(xv-sx*rr)+' '+G.m+'Q'+xv+' '+G.m+' '+xv+' '+(G.m+sy*rr)+'L'+xv+' '+(Q.m-sy*rr)+'Q'+xv+' '+Q.m+' '+(xv-sx*rr)+' '+Q.m+'L'+x1+' '+Q.m+'"/>'+linkBar(x0,G.m,sx)+linkBar(x1,Q.m,sx);
   });
   if(!paths) return;
   /* room beside the rows for the line to turn (on the left in Hebrew) */
@@ -1152,8 +1156,10 @@ function linkPath(g,r,all,k){
   if(!va.ok){var vb=strip(g,-sa,ya,yh);if(vb.ok){sa=-sa;va=vb;}}
   var xa=sa<0?g.x:g.x+TW,xv=va.x;
   var sr=xv<r.x+TW/2?-1:1,xb=sr<0?r.x:r.x+TW,xr=strip(r,sr,yh,yb).x;
-  return '<path d="'+roundPath([[xa,ya],[xv,ya],[xv,yh],[xr,yh],[xr,yb],[xb,yb]],9)+'"/>';
+  return '<path d="'+roundPath([[xa,ya],[xv,ya],[xv,yh],[xr,yh],[xr,yb],[xb,yb]],9)+'"/>'+linkBar(xa,ya,sa)+linkBar(xb,yb,sr);
 }
+/* the link line's end bar, just outside the card's side (side -1 = left, +1 = right) */
+function linkBar(x,y,side){return '<path d="M'+(x+side*2)+' '+(y-7)+'V'+(y+7)+'" stroke-width="3" stroke-dasharray="none"/>';}
 function linkSVG(paths,w,h){return paths?'<svg class="flink" width="'+Math.ceil(w)+'" height="'+Math.ceil(h)+'" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none" fill="none" stroke="#8C7AB5" stroke-width="2" stroke-dasharray="6 5" stroke-linecap="round">'+paths+'</svg>':'';}
 /* Where a family's children hang from, left to right: a marriage's label sits in the gap just before
    its husband or wife; a single parent's children hang from that parent's card. */
@@ -1188,15 +1194,18 @@ function wedHTML(m){
   if(ui.calMode==='heb') return '<bdi dir="rtl" lang="he">'+esc(t)+'<br>'+esc(gem(hebOf(m.date,m.sunset).y%1000))+'</bdi>';
   return esc(t)+'<br>'+parseISO(m.date).y;
 }
-/* A marriage line drawn gap by gap: where it passes behind another husband's or wife's card it stops a
-   little short of that card on both sides, so it clearly goes under it; it only touches its own couple. */
-var MGAP=7;
+/* End bars: {t:'bar', x, y = where the line meets the card's edge, s = which side of the card (l, r, t, b)}.
+   Every line gets one where it starts or ends at a card, so a line without one is clearly passing behind. */
+function bar(items,x,y,s,cls){items.push({t:'bar',x:x,y:y,s:s,cls:cls||''});}
+/* A marriage line runs unbroken from one spouse to the other (behind any spouses in between), with an
+   end bar at its own two cards only. */
 function marSegs(items,g,xs,sh,cls){
-  for(var k=g.i;k<g.j;k++){
-    var a=xs[k]+TW+sh+(k>g.i?MGAP:0),b=xs[k+1]+sh-(k+1<g.j?MGAP:0);
-    if(b>a) items.push({t:'h',x:a,y:g.ly,w:b-a,cls:cls});
-  }
+  var a=xs[g.i]+TW+sh,b=xs[g.j]+sh,yc=g.ly+(g.st===3?2:1),bc='mar'+(g.m.divorced?' ended':'');
+  items.push({t:'h',x:a,y:g.ly,w:b-a,cls:cls});
+  bar(items,a,yc,'r',bc);bar(items,b,yc,'l',bc);
 }
+/* End bars on the tops of the children's cards (a stacked column is fed from its side, not its top). */
+function kidBars(items,xs,y,subs){subs.forEach(function(x,i){if(!x.stack) bar(items,xs[i]+0.75,y,'t');});}
 function marriageOrd(m){
   function ix(pid){var l=spousesOf(pid);if(l.length<2) return -1;for(var i=0;i<l.length;i++) if(l[i].m===m) return i;return -1;}
   var i=ix(m.a);if(i<0) i=ix(m.b);
@@ -1280,6 +1289,8 @@ function layoutFam(id,seen,depth){
     left.forEach(function(cx){var r=R(ax-cx);items.push({t:'el',c:'tl',x:cx,y:busY,w:xL-cx,h:childY-busY,r:r});});
     right.forEach(function(cx){var r=R(cx-ax);items.push({t:'el',c:'tr',x:xR,y:busY,w:cx+LW-xR,h:childY-busY,r:r});});
     if(mid&&(left.length||right.length)) items.push({t:'v',x:ax,y:busY,h:childY-busY});
+    if(g.single!=null) bar(items,ax+0.75,TH,'b');
+    kidBars(items,cxs,childY,g.subs);
     styleLines(items,i0,g);
     g.subs.forEach(function(s){
       var ox=g.L+s.ox+sh;
@@ -1311,9 +1322,9 @@ function branchOpen(key,depth){return ui.treeOpen[key]!=null?ui.treeOpen[key]:de
 function stackCol(ms){
   var items=[],n=ms.length,hh=n*TH+(n-1)*STG,mid=function(j){return j*(TH+STG)+TH/2;};
   items.push({t:'v',x:2,y:0,h:mid(n-1)});
-  ms.forEach(function(m,j){m.items.forEach(function(it){var c=Object.assign({},it);c.x+=STX;c.y+=j*(TH+STG);items.push(c);});items.push({t:'h',x:2,y:mid(j),w:STX-2});});
+  ms.forEach(function(m,j){m.items.forEach(function(it){var c=Object.assign({},it);c.x+=STX;c.y+=j*(TH+STG);items.push(c);});items.push({t:'h',x:2,y:mid(j),w:STX-2});bar(items,STX,mid(j)+0.75,'l');});
   var ct=[];ctBand(ct,0,hh,0,STX+TW);
-  return {w:STX+TW,h:hh,cx:2,items:items,ct:ct};
+  return {w:STX+TW,h:hh,cx:2,items:items,ct:ct,stack:true};
 }
 function layoutPack(id,seen,depth){
   var mode=ui.treeLayout,chain=chainOf(id,seen);
@@ -1407,6 +1418,7 @@ function layoutPack(id,seen,depth){
     if(!g.shut) return;
     var ax=g.ax+sh,y0=g.single!=null?TH:TH/2+(marriageOrd(g.m)?20:12);
     items.push({t:'v',x:ax,y:y0,h:TH+14-y0});
+    if(g.single!=null) bar(items,ax+0.75,TH,'b');
     items.push({t:'chip',x:ax,y:TH+14,k:g.key,n:g.kids.length});
     ctAdd(ct,1,ax-CHW/2,ax+CHW/2);
   });
@@ -1437,6 +1449,7 @@ function layoutPack(id,seen,depth){
           else if(ri>0||c>ax+1) items.push({t:'el',c:'tr',x:c-rc,y:by,w:rc+LW,h:top-by,r:rc});
           else items.push({t:'v',x:c,y:by,h:top-by});
         });
+        kidBars(items,cx,top,r);
       });
       ctAdd(ct,1,tx-2,Math.max(ax,rl0));
     } else {
@@ -1450,8 +1463,11 @@ function layoutPack(id,seen,depth){
       left.forEach(function(cx){var r=R(ax-cx);items.push({t:'el',c:'tl',x:cx,y:busY,w:xL-cx,h:childY-busY,r:r});});
       right.forEach(function(cx){var r=R(cx-ax);items.push({t:'el',c:'tr',x:xR,y:busY,w:cx+LW-xR,h:childY-busY,r:r});});
       if(mid&&(left.length||right.length)) items.push({t:'v',x:ax,y:busY,h:childY-busY});
+      kidBars(items,cxs,childY,g.subs);
       ctAdd(ct,1,Math.min(ax,cxs[0]),Math.max(ax,cxs[cxs.length-1]));
     }
+    /* a single parent's line starts at the bottom of their card (in open & close mode the − button sits there) */
+    if(g.single!=null&&!(mode==='branch'&&depth>0)) bar(items,ax+0.75,TH,'b');
     styleLines(items,i0,g);
     if(mode==='branch'&&depth>0) items.push({t:'chip',x:ax,y:TH+2,k:g.key,open:true});
     ctPut(ct,g.ct,g.L+sh,2);
@@ -1537,6 +1553,7 @@ function outlineRowHTML(r,root,placed,pdf,copies){
     var e=r.elbow;
     if(!e.last) h+=seg({x:e.x,top:'0',bottom:'0'},[S],null,e.st);
     h+=seg({x:e.x,top:'0',height:'calc'+mid,width:(x0-e.x+1)+'px'},[S,'bottom'],'bottom-'+S,e.st);
+    h+='<i class="obar" style="'+S+':'+(x0-3.5)+'px;top:calc('+mid.slice(1,-1)+' - 7.75px);width:3px;height:14px"></i>';
   }
   r.groups.forEach(function(g,k){
     var sx=g.src.ring!=null?x0+(g.src.ring+1)*OCW+g.src.ring*ORW+ORW/2:x0+g.src.card*(OCW+ORW)+OCW/2;
@@ -1546,6 +1563,7 @@ function outlineRowHTML(r,root,placed,pdf,copies){
     h+=seg({x:g.tx+ORAD,top:top,bottom:bk+'px',width:(sx-g.tx-ORAD+1.5)+'px'},[O,'bottom'],'bottom-'+O,g.st);
     /* … and round the corner down towards the children */
     h+=seg({x:g.tx,bottom:'0',height:(bk+1.5)+'px',width:(ORAD+1)+'px'},[S,'top'],'top-'+S,g.st);
+    if(g.src.ring==null) h+='<i class="obar" style="'+S+':'+(sx-6.25)+'px;top:calc(100% - '+(pb-0.5)+'px);width:14px;height:3px"></i>';
   });
   h+=r.ids.map(function(id,i){
     var ring=i<r.ids.length-1?'<span class="oring">'+(r.rw&&r.rw[i]?'<span class="owed">'+r.rw[i]+'</span>':'')+'⚭'+(r.rl[i]?'<small>'+r.rl[i]+'</small>':'')+'</span>':'';
@@ -1568,6 +1586,7 @@ function mirrorTree(L){
   L.items.forEach(function(it){
     if(it.t==='card') it.x=W-it.x-TW;
     else if(it.t==='ring'||it.t==='chip') it.x=W-it.x;
+    else if(it.t==='bar'){it.x=W-it.x;it.s={l:'r',r:'l'}[it.s]||it.s;}
     else if(it.t==='h') it.x=W-it.x-it.w;
     else if(it.t==='v') it.x=W-it.x-LW;
     else if(it.t==='el'){it.x=W-it.x-it.w;it.c=swap[it.c];}
@@ -1607,6 +1626,10 @@ function treeMarkup(root,pdf){
     var y=it.y+TPAD;
     if(it.t==='h') h+='<i class="fl-h'+(it.cls?' '+it.cls:'')+'" style="left:'+it.x+'px;top:'+y+'px;width:'+it.w+'px"></i>';
     else if(it.t==='v') h+='<i class="fl-v'+(it.cls?' '+it.cls:'')+'" style="left:'+it.x+'px;top:'+y+'px;height:'+it.h+'px"></i>';
+    else if(it.t==='bar'){
+      var sd=it.s==='l'||it.s==='r';
+      h+='<i class="fl-bar'+(it.cls?' '+it.cls:'')+'" style="left:'+(sd?(it.s==='l'?it.x-3.5:it.x+0.5):it.x-7)+'px;top:'+(sd?y-7:(it.s==='t'?y-3.5:y+0.5))+'px;width:'+(sd?3:14)+'px;height:'+(sd?14:3)+'px"></i>';
+    }
     else if(it.t==='el') h+='<i class="fl-el '+it.c+(it.cls?' '+it.cls:'')+'" style="left:'+it.x+'px;top:'+y+'px;width:'+Math.max(0,it.w)+'px;height:'+it.h+'px;'+{tl:'border-top-left-radius',tr:'border-top-right-radius',bl:'border-bottom-left-radius',br:'border-bottom-right-radius'}[it.c]+':'+it.r+'px"></i>';
   });
   L.items.forEach(function(it){
