@@ -1430,8 +1430,8 @@ function tsCSS(){
   c+='.ts-modern .fring{border-radius:999px;background:#0F172A;color:#fff;padding:3px 6px;font-size:12px}.ts-modern .fring small{color:#CBD5E1}.ts-modern .fring .fwed{background:#F4F6FA;color:#0F172A}.ts-modern .otree .oc{border-color:#CBD5E1}\n';
   /* Floral */
   c+='.ts-floral .tcard{border:1.5px solid #E7AFC0;border-radius:26px;overflow:visible;font-family:Bellefair,"Frank Ruhl Libre",serif}\n';
-  c+='.ts-floral .tcard::before{content:"";position:absolute;top:-40px;right:-36px;width:124px;height:94px;background:'+BQ[0]+' no-repeat center/contain;pointer-events:none}\n';
-  c+='.ts-floral .tcard::after{content:"";position:absolute;bottom:-32px;left:-30px;width:90px;height:72px;background:'+BQ2[0]+' no-repeat center/contain;pointer-events:none}\n';
+  c+='.ts-floral .tcard::before{content:"";position:absolute;top:-58px;right:-36px;width:124px;height:94px;background:'+BQ[0]+' no-repeat center/contain;pointer-events:none}\n';
+  c+='.ts-floral .tcard::after{content:"";position:absolute;bottom:-45px;left:-30px;width:90px;height:72px;background:'+BQ2[0]+' no-repeat center/contain;pointer-events:none}\n';
   /* each card its own soft colour, with a matching border and bouquet */
   var KT=[['#FFFDF3','#E8C96A'],['#FFF3F6','#E7A3B6'],['#FFF8E4','#E3B54E'],['#F8F4FE','#BBA5E3'],['#FFF5EE','#F0AE88']];
   KT.forEach(function(t,k){c+='.ts-floral .tcard.fk'+k+'{background:'+t[0]+';border-color:'+t[1]+'}.ts-floral .tcard.fk'+k+'::before{background-image:'+BQ[k]+'}.ts-floral .tcard.fk'+k+'::after{background-image:'+BQ2[k]+'}\n';});
