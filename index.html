@@ -423,6 +423,8 @@ textarea.inp{min-height:70px;resize:vertical}
 .pr-pages .pvw-frame{height:100%;min-height:400px}
 @media (max-width:1100px){.pr-opts{flex-basis:340px}}
 @media (max-width:720px){.dlg-box.wide .dlg-main{display:block;overflow:auto}.dlg-box.wide .dlg-nav{width:auto}.dlg-box.wide .dlg-pane,.dlg-box.wide .pr-pages{overflow:visible}.pr-view{border:0;border-top:1px solid var(--line)}.pr-bar{position:sticky;top:0;z-index:1}}
+.check.dis,.row.dis{opacity:.45}
+.check.dis input{cursor:not-allowed}
 .sec{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
 .sec>b{display:block;font-size:15px;margin-bottom:2px}
 .sec.danger{border-color:color-mix(in srgb,#B3261E 30%,var(--line))}
@@ -624,6 +626,7 @@ function primaryText(p){return p?(hebName(p)||fullName(p)):'Unknown';}
 function nameHTML(p,zl){
   if(!p) return 'Unknown';
   var hn=hebName(p),z=zl&&p.deceased;
+  if(hn&&PRN&&PRN.en&&PRN.inlineEn) return '<bdi class="hn" dir="rtl" lang="he">'+hebPartsHTML(p)+(z?' <span class="np">ז״ל</span>':'')+'</bdi> <span class="en">('+esc(fullName(p))+')</span>';
   return hn?'<bdi class="hn" dir="rtl" lang="he">'+hebPartsHTML(p)+(z?' <span class="np">ז״ל</span>':'')+'</bdi>':esc(fullName(p))+(z?' <span class="zl">ז״ל</span>':'');
 }
 function kidsOf(id){return (idx.kids[id]||[]).slice();}
@@ -725,7 +728,7 @@ function visible(e){if(!prefs.kinds[e.kind]) return false;if(e.kind==='holiday')
    them — the person, their children, grandchildren and so on (living or not), and each one's husband or wife,
    so a married-in spouse's birthday and the couple's anniversary are included too. */
 function calWho(){return ui.calWho?P(ui.calWho)||null:null;}
-function setCalWho(pid){ui.calWho=pid||'';lsSet('fl-calwho',ui.calWho);}
+function setCalWho(pid){ui.calWho=pid||'';lsSet('fl-calwho',ui.calWho);if(ui.popt){['tree','month','year','wall'].forEach(function(k){if(ui.popt[k]) ui.popt[k].who=ui.calWho;});savePopt();}}
 function whoSet(pid){
   var set={},blood=[pid],todo=[pid];set[pid]=1;
   while(todo.length){var x=todo.pop();kidsOf(x).forEach(function(k){if(!set[k]){set[k]=1;blood.push(k);todo.push(k);}});}
@@ -1142,8 +1145,8 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
     h+='<span class="tn">'+esc(p.first||'Unnamed')+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     if(p.last||p.maiden) h+='<span class="tl">'+esc([p.last,p.maiden?'('+p.maiden+')':''].filter(Boolean).join(' '))+'</span>';
   }
-  if(po&&po.hebd&&!p.deceased&&b&&!p.birthNoYear) h+='<span class="th"><bdi dir="rtl" lang="he">'+esc(fmtHe(hebOf(p.birth,p.birthSunset)))+'</bdi></span>';
-  if(dates&&(!po||po.dates)) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
+  if(po&&po.bday&&po.heb&&!p.deceased&&b&&!p.birthNoYear) h+='<span class="th"><bdi dir="rtl" lang="he">'+esc(fmtHe(hebOf(p.birth,p.birthSunset)))+'</bdi></span>';
+  if(dates&&(!po||(po.bday&&po.greg))) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
   if(p.deceased&&d&&(!po||po.yz)) h+='<span class="tyz"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
   if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
   /* grandchildren and every generation below them (great-grandchildren and so on) */
@@ -1292,6 +1295,7 @@ function wedLabel(m){
   return ui.calMode==='heb'?fmtHe(hebOf(m.date,m.sunset),false):fmtMD(d);
 }
 function wedHTML(m){
+  if(PDFOPT&&!PDFOPT.anniv) return '';
   var t=wedLabel(m);if(!t) return '';
   if(ui.calMode==='heb') return '<bdi dir="rtl" lang="he">'+esc(t)+'<br>'+esc(gem(hebOf(m.date,m.sunset).y%1000))+'</bdi>';
   return esc(t)+'<br>'+parseISO(m.date).y;
@@ -2232,6 +2236,51 @@ var PAPERS={letter:[8.5,11,'Letter 8½ × 11 in'],legal:[8.5,14,'Legal 8½ × 14
 var TPDF_DEF={paper:'letter',split:0,title:'',date:true,foot:true,en:true,dates:true,hebd:false,counts:true,yz:true,legend:false,hq:false};
 /* while a tree PDF is being drawn: which details the cards show */
 var PDFOPT=null;
+/* Every print has the same options (kept separately for each kind of print, on this device).
+   PRN: the options of the print being made right now. */
+var PRN=null;
+var POPT_BASE={orient:'landscape',paper:'letter',split:0,hq:false,title:'',date:true,foot:true,legend:false,who:'',sort:'last',
+  bday:true,anniv:true,yz:true,other:true,hol:true,greg:true,heb:true,en:false,counts:false};
+function savePopt(){lsSet('fl-popt',ui.popt);}
+function popt(k){
+  if(!ui.popt) ui.popt=lsGet('fl-popt',null)||{};
+  if(!ui.popt[k]){
+    var o=Object.assign({},POPT_BASE,{orient:ui.orient});
+    if(k==='tree'){
+      var t=lsGet('fl-tpdf',null)||{};
+      Object.assign(o,{en:true,counts:true,heb:false,other:false,hol:false,who:ui.treeRoot||''});
+      ['paper','split','title','date','foot','legend','hq','en','counts','yz'].forEach(function(x){if(t[x]!=null) o[x]=t[x];});
+      if(t.dates!=null) o.greg=t.dates;if(t.hebd!=null) o.heb=t.hebd;
+    } else if(k==='people'){Object.assign(o,{en:true,counts:true,other:false,hol:false});}
+    else{
+      Object.assign(o,{bday:!!prefs.kinds.birthday,anniv:!!prefs.kinds.anniversary,yz:!!prefs.kinds.yahrzeit,other:!!prefs.kinds.other,hol:!!prefs.kinds.holiday,greg:!!prefs.greg,heb:!!prefs.heb});
+      if(k!=='upcoming'){o.who=ui.calWho||'';o.legend=true;}
+      if(k==='wall') o.paper={'18x24':'p18','24x36':'p24','36x48':'p36'}[lsGet('fl-wall','24x36')]||'p24';
+    }
+    ui.popt[k]=o;
+  }
+  if(!PAPERS[ui.popt[k].paper]) ui.popt[k].paper='letter';
+  return ui.popt[k];
+}
+/* which dates a print includes: the kinds of dates, English and/or Hebrew calendar, whose family */
+function evFilter(o){
+  var set=o.who&&P(o.who)?whoSet(o.who):null,kinds={birthday:o.bday,anniversary:o.anniv,yahrzeit:o.yz,other:o.other};
+  return function(e){
+    if(e.kind==='holiday') return !!o.hol;
+    if(!kinds[e.kind]||!(e.cal==='greg'?o.greg:o.heb)) return false;
+    return !set||e.pids.some(function(x){return set[x];});
+  };
+}
+function prnWho(o){var p=o&&o.who?P(o.who):null;return p?'Family of '+coupleLabel(p):'';}
+/* options that don't apply to a kind of print (they stay on screen, greyed out) */
+var PNA={
+  tree:{other:'the tree shows no other dates',hol:'the tree shows no holidays'},
+  month:{counts:'calendars show no counts'},
+  year:{counts:'calendars show no counts',split:'only for one-page prints'},
+  wall:{counts:'calendars show no counts',split:'the wall calendar is one sheet',hq:'the wall calendar is always sharp',foot:'the wall calendar has no footer'},
+  upcoming:{counts:'the list shows no counts',split:'only for one-page prints'},
+  people:{other:'the directory shows no other dates',hol:'the directory shows no holidays',split:'only for one-page prints',legend:'the directory has no legend'}
+};
 function tpdf(){if(!ui.tpdf) ui.tpdf=Object.assign({},TPDF_DEF,lsGet('fl-tpdf',null)||{});if(!PAPERS[ui.tpdf.paper]) ui.tpdf.paper='letter';return ui.tpdf;}
 /* A key to the lines, printed under the tree. */
 function treeLegendHTML(){
@@ -2311,7 +2360,7 @@ function listBlocks(a0,a1,showWhen,byHebMonth,flt){
 }
 function pxMonthGrid(width){
   var r=calRange(),heb=ui.calMode==='heb',by={},cellH=ui.orient==='portrait'?138:92;
-  eventsBetween(r.s,r.e).filter(calFilter()).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
+  eventsBetween(r.s,r.e).filter(PRN?evFilter(PRN):calFilter()).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
   var h='<div class="px-cal"'+(heb?' dir="rtl"':'')+' style="width:'+(width||976)+'px">';
   WDS.forEach(function(w,i){h+='<div class="px-wd">'+(i===6?'Shabbat':w)+'</div>';});
   for(var a=r.s;a<=r.e;a++){
@@ -2322,11 +2371,11 @@ function pxMonthGrid(width){
     (by[a]||[]).forEach(function(e){h+='<div class="px-ev" style="'+(heb?'border-right-color:':'border-left-color:')+KHEX[kkey(e)]+'">'+evShort(e)+(e.cal==='heb'&&e.kind!=='holiday'&&!heb?' (א)':'')+'</div>';});
     h+='</div>';
   }
-  return h+'</div>'+pxLegend();
+  return h+'</div>'+(PRN&&!PRN.legend?'':pxLegend());
 }
 function pxYearGlance(){
   var ms=yearMonths(),heb=ui.calMode==='heb',by={};
-  eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(calFilter()).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
+  eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(PRN?evFilter(PRN):calFilter()).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
   var cols=ui.orient==='portrait'?3:4,h='<div class="px-yg"'+(heb?' dir="rtl"':'')+' style="grid-template-columns:repeat('+cols+',1fr)">';
   ms.forEach(function(mo){
     h+='<div class="px-ym"><div class="t">'+esc(mo.t)+'<span class="he" dir="rtl" lang="he">'+esc(mo.he)+'</span></div><div class="px-mini">';
@@ -2338,50 +2387,64 @@ function pxYearGlance(){
     }
     h+='</div></div>';
   });
-  return h+'</div>'+pxLegend();
+  return h+'</div>'+(PRN&&!PRN.legend?'':pxLegend());
 }
 function exportSpec(kind){
-  var hT=H.fromAbs(TODAY);
+  var hT=H.fromAbs(TODAY),o=PRN||popt(kind),wt=prnWho(o),wp=o.who?P(o.who):null,flt=evFilter(o);
   var spec={printed:'Printed '+fmtG(TODAY)+' · '+fmtH(hT),blocks:[],orient:ui.orient,fit:false,pageHead:'',title:'',file:'',body:''};
   var PW=ui.orient==='portrait'?816:1056;
   if(kind==='year'){
     var yt=yearTitle(),ms=yearMonths();
-    spec.title='Year calendar · '+yt.t+' ('+yt.sub+')'+(whoTitle()?' · '+whoTitle():'');spec.file='Calendar '+yt.t+(calWho()?' - '+primaryText(calWho()):'');
-    spec.blocks=[{html:'<div>'+pxYearGlance()+'</div>',breakAfter:true}].concat(listBlocks(ms[0].a0,ms[ms.length-1].a1,false,ui.calMode==='heb',calFilter()));
+    spec.title='Year calendar · '+yt.t+' ('+yt.sub+')'+(wt?' · '+wt:'');spec.file='Calendar '+yt.t+(wp?' - '+primaryText(wp):'');
+    spec.blocks=[{html:'<div>'+pxYearGlance()+'</div>',breakAfter:true}].concat(listBlocks(ms[0].a0,ms[ms.length-1].a1,false,ui.calMode==='heb',flt));
   } else if(kind==='month'){
     var mt=monthTitle();
-    spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub+(whoTitle()?' · '+whoTitle():'');spec.file='Calendar '+mt.t+(calWho()?' - '+primaryText(calWho()):'');spec.body=pxMonthGrid(PW-80);
+    spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub+(wt?' · '+wt:'');spec.file='Calendar '+mt.t+(wp?' - '+primaryText(wp):'');spec.body=pxMonthGrid(PW-80);
   } else if(kind==='tree'){
-    var root=currentRoot();
+    var roots=treeRoots(),root=wp?wp.id:(roots[0]?roots[0].id:currentRoot());
     spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';
     var tsc=useTreeStyle(ui.treeStyle);
     if(ui.treeLayout==='outline') spec.blocks=outlineParts(root,true).map(function(r){return {html:'<div class="otree'+tsc+(ui.calMode==='heb'?' rtl':'')+'">'+r+'</div>'};});
     else{spec.fit=true;spec.body=tsc?'<div class="tsw'+tsc+'">'+treeMarkup(root,true)+'</div>':treeMarkup(root,true);}
   } else if(kind==='people'){
-    spec.title='Family directory · '+data.people.length+' people';spec.file='Family directory';
-    spec.pageHead='<div class="px-prow h"><span>Name</span><span>English name</span><span>Born</span><span>Age</span><span>Married to</span><span>Children</span><span>Grandchildren</span></div>';
-    var list=data.people.slice().sort(function(a,b){var x=(a.last+' '+a.first).toLowerCase(),y=(b.last+' '+b.first).toLowerCase();return x<y?-1:x>y?1:0;});
+    /* the directory: the chosen family, sorted as chosen, with the columns the options ask for */
+    var set=wp?whoSet(wp.id):null,list=data.people.filter(function(p){return !set||set[p.id];});
+    var key=function(p){return o.sort==='first'?(p.first+' '+p.last):(p.last+' '+p.first);};
+    var p0=function(p){return parseISO(p.birth)?isoAbs(p.birth):9e9;};
+    list.sort(o.sort==='birth'?function(a,b){return p0(a)-p0(b);}:function(a,b){var x=key(a).toLowerCase(),y=key(b).toLowerCase();return x<y?-1:x>y?1:0;});
+    var cols=[['Name','1.35fr']].concat(o.en?[['English name','1.4fr']]:[],o.bday?[['Born','1.25fr']]:[],[['Age','.6fr'],['Married to','1.35fr']],o.counts?[['Children','.55fr'],['Grandchildren','.65fr']]:[]);
+    var tpl=' style="grid-template-columns:'+cols.map(function(c){return c[1];}).join(' ')+'"';
+    spec.title='Family directory · '+list.length+(list.length===1?' person':' people')+(wt?' · '+wt:'');spec.file='Family directory'+(wp?' - '+primaryText(wp):'');
+    spec.pageHead='<div class="px-prow h"'+tpl+'>'+cols.map(function(c){return '<span>'+c[0]+'</span>';}).join('')+'</div>';
     spec.blocks=list.map(function(p){
-      var b=parseISO(p.birth),gc=genCounts(p.id),hb=b&&!p.birthNoYear?hebOf(p.birth,p.birthSunset):null,na=noAge(p);
-      var born=b?(p.birthNoYear||na?fmtMD(b):fmtG(isoAbs(p.birth)))+(hb?'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hb,!na))+'</span>':''):'';
-      var age=p.deceased?'ז״ל':(!na&&ageAt(p,TODAY)!=null?String(ageAt(p,TODAY)):'');
-      var sp=spousesOf(p.id).map(function(s){return primaryText(P(s.pid))+(s.m.divorced?' (div.)':'');}).concat(soloOf(p.id).filter(function(m){return soloName(m);}).map(function(m){return soloName(m)+(m.divorced?' (div.)':'');})).join(', ');
-      return {html:'<div class="px-prow"><span class="n">'+nameHTML(p,true)+(p.phone?'<br><span style="font-weight:400;color:#77818D">'+esc(p.phone)+'</span>':'')+'</span><span>'+(hebName(p)?esc(fullName(p)):'')+'</span><span>'+born+'</span><span>'+esc(age)+'</span><span>'+esc(sp)+'</span><span>'+(gc[0]||0)+'</span><span>'+grandTotal(gc)+'</span></div>'};
+      var b=parseISO(p.birth),gc=genCounts(p.id),hb=b&&!p.birthNoYear?hebOf(p.birth,p.birthSunset):null,na=noAge(p),d=parseISO(p.death);
+      var born=b?[o.greg?(p.birthNoYear||na?fmtMD(b):fmtG(isoAbs(p.birth))):'',o.heb&&hb?'<span class="he" dir="rtl" lang="he">'+esc(fmtHe(hb,!na))+'</span>':''].filter(Boolean).join('<br>'):'';
+      var age=p.deceased?'ז״ל'+(o.yz&&d?'<br><span class="he" dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</span>':''):(!na&&ageAt(p,TODAY)!=null?String(ageAt(p,TODAY)):'');
+      var wed=function(m){var md=parseISO(m.date);if(!o.anniv||!md||m.divorced) return '';return ' · '+(o.greg||!o.heb?'<bdi dir="ltr">'+fmtG(isoAbs(m.date))+'</bdi>':'<span class="he" dir="rtl" lang="he">'+esc(fmtHe(hebOf(m.date,m.sunset)))+'</span>');};
+      var sp=spousesOf(p.id).map(function(s){return '<bdi>'+esc(primaryText(P(s.pid)))+'</bdi>'+(s.m.divorced?' <bdi dir="ltr">(div.)</bdi>':'')+wed(s.m);}).concat(soloOf(p.id).filter(function(m){return soloName(m);}).map(function(m){return '<bdi>'+esc(soloName(m))+'</bdi>'+(m.divorced?' <bdi dir="ltr">(div.)</bdi>':'')+wed(m);})).join(', ');
+      var cells=['<span class="n">'+nameHTML(p,true)+(p.phone?'<br><span style="font-weight:400;color:#77818D">'+esc(p.phone)+'</span>':'')+'</span>'];
+      if(o.en) cells.push('<span>'+(hebName(p)?esc(fullName(p)):'')+'</span>');
+      if(o.bday) cells.push('<span>'+born+'</span>');
+      cells.push('<span>'+age+'</span>','<span>'+sp+'</span>');
+      if(o.counts) cells.push('<span>'+(gc[0]||0)+'</span>','<span>'+grandTotal(gc)+'</span>');
+      return {html:'<div class="px-prow"'+tpl+'>'+cells.join('')+'</div>'};
     });
   } else {
-    spec.title='Upcoming dates · '+fmtG(TODAY)+' – '+fmtG(TODAY+ui.horizon);spec.file='Upcoming dates';
-    spec.blocks=listBlocks(TODAY,TODAY+ui.horizon,true,false);
+    spec.title='Upcoming dates · '+fmtG(TODAY)+' – '+fmtG(TODAY+ui.horizon)+(wt?' · '+wt:'');spec.file='Upcoming dates'+(wp?' - '+primaryText(wp):'');
+    spec.blocks=listBlocks(TODAY,TODAY+ui.horizon,true,false,flt);
+    if(o.legend) spec.blocks.push({html:pxLegend()});
   }
   return spec;
 }
 function makePdf(opts){
   opts=opts||{};
-  if(opts.kind==='wall') return makeWall(opts.size);
+  if(opts.kind==='wall') return makeWall(popt('wall'));
   var stage=null,sy=window.scrollY||0;
   return loadLibs().then(function(){return document.fonts&&document.fonts.ready?document.fonts.ready:null;}).then(function(){
     /* the tree has its own options (paper, pages, title, what the cards show …) */
-    var o=opts.kind==='tree'?tpdf():null,spec;
-    PDFOPT=o;try{spec=exportSpec(opts.kind);}finally{PDFOPT=null;}
+    var o=popt(opts.kind||'upcoming'),spec,so=ui.orient;
+    PRN=Object.assign({},o,{kind:opts.kind,inlineEn:/^(month|year|upcoming)$/.test(opts.kind||'upcoming')});PDFOPT=opts.kind==='tree'?o:null;ui.orient=o.orient;
+    try{spec=exportSpec(opts.kind||'upcoming');}finally{PRN=null;PDFOPT=null;ui.orient=so;}
     var land=spec.orient==='landscape',paper=o?PAPERS[o.paper]:PAPERS.letter,pin=land?[paper[1],paper[0]]:[paper[0],paper[1]];
     /* pages are laid out at 96 px per inch; a tree page starts letter-wide and is then fitted to the paper */
     var W=spec.fit?(land?1056:816):Math.round(pin[0]*96),Hh=Math.round(pin[1]*96);
@@ -2393,14 +2456,15 @@ function makePdf(opts){
     var head='<div class="px-head"><div><div class="px-fam" dir="auto">'+esc(title)+'</div><div class="px-title">'+esc(spec.title)+'</div></div>'+(showDate?'<div class="px-date">'+esc(spec.printed)+'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(H.fromAbs(TODAY)))+'</span></div>':'')+'</div>';
     var split=o&&spec.fit&&o.split>1?o.split:0;
     var foot=showFoot&&!split?'<div class="px-foot"><span>Family Luach</span><span class="px-pn"></span></div>':'';
-    var legend=o&&o.legend?treeLegendHTML():'';
+    var legend=o.legend&&opts.kind==='tree'?treeLegendHTML():'';
+    var rtlBody=ui.calMode==='heb'&&/^(year|upcoming|people)$/.test(opts.kind||'upcoming');
     var pages=[];
     function toEl(html){var t=document.createElement('div');t.innerHTML=html;return t.children.length===1?t.firstElementChild:t;}
     if(spec.fit){
       var pg=document.createElement('div');pg.className='px-page fit';pg.style.minWidth=W+'px';
       pg.innerHTML=head+'<div class="px-fitbody">'+spec.body+legend+'</div>'+foot;stage.appendChild(pg);pages.push(pg);
     } else {
-      var newPage=function(){var pg=document.createElement('div');pg.className='px-page';pg.style.width=W+'px';pg.style.height=Hh+'px';pg.innerHTML=head+'<div class="px-body">'+spec.pageHead+'</div>'+foot;stage.appendChild(pg);pages.push(pg);return pg.querySelector('.px-body');};
+      var newPage=function(){var pg=document.createElement('div');pg.className='px-page';pg.style.width=W+'px';pg.style.height=Hh+'px';pg.innerHTML=head+'<div class="px-body"'+(rtlBody?' dir="rtl"':'')+'>'+spec.pageHead+'</div>'+foot;stage.appendChild(pg);pages.push(pg);return pg.querySelector('.px-body');};
       var blocks=legend?spec.blocks.concat([{html:legend}]):spec.blocks;
       var body=newPage(),base=body.children.length;
       blocks.forEach(function(b,i){
@@ -2449,7 +2513,7 @@ function makePdf(opts){
       });
     } else {
       pages.forEach(function(pg,j){
-        chain=chain.then(function(){return window.html2canvas(pg,{scale:pv?Math.min(1.25,2600/Math.max(pg.offsetWidth,pg.offsetHeight)):spec.fit&&o?scaleFor(pg,pin[0]):2,backgroundColor:'#ffffff',logging:false,useCORS:true});}).then(function(cv){
+        chain=chain.then(function(){return window.html2canvas(pg,{scale:pv?Math.min(1.25,2600/Math.max(pg.offsetWidth,pg.offsetHeight)):spec.fit?scaleFor(pg,pin[0]):(o.hq?3:2),backgroundColor:'#ffffff',logging:false,useCORS:true});}).then(function(cv){
           var r=Math.min(pw/cv.width,ph/cv.height),w=cv.width*r,hh=cv.height*r,px0=(pw-w)/2,py0=spec.fit?Math.max(0,(ph-hh)/2):0;
           if(pv){previews.push(sheet(cv,px0,py0,w,hh));count++;return;}
           if(j>0) pdf.addPage([pw,ph],land?'landscape':'portrait');
@@ -2481,14 +2545,14 @@ function printDialog(){
 /* What the window is set to print right now */
 function printKind(){var t=PRINT_TABS.some(function(x){return x[0]===ui.printTab;})?ui.printTab:'tree';return t==='calendar'?(ui.calKind||'month'):t;}
 var dataVer=0,pvTimer=null,pvSeq=0;
-function printKey(){var k=printKind();return JSON.stringify([k,k==='tree'?[tpdf(),ui.treeLayout,ui.treeStyle,currentRoot()]:0,ui.orient,ui.calMode,ui.hCur,ui.gCur,prefs.kinds,prefs.greg,prefs.heb,ui.calWho,ui.horizon,k==='wall'?lsGet('fl-wall','24x36'):0,dataVer,data.meta.familyName]);}
+function printKey(){var k=printKind();return JSON.stringify([k,popt(k),k==='tree'?[ui.treeLayout,ui.treeStyle]:0,ui.calMode,ui.hCur,ui.gCur,ui.horizon,dataVer,data.meta.familyName]);}
 /* The preview follows every change: a moment after the last one it is made again. */
 function schedulePreview(){
   var key=printKey();if(ui.pv&&ui.pv.key===key) return;
   ui.pv=Object.assign(ui.pv||{},{key:key,busy:true,err:false});paintPreview();
   clearTimeout(pvTimer);var seq=++pvSeq;
   pvTimer=setTimeout(function(){
-    makePdf({kind:printKind(),size:lsGet('fl-wall','24x36'),preview:true}).then(function(out){
+    makePdf({kind:printKind(),preview:true}).then(function(out){
       if(seq!==pvSeq||!ui.pdfMenu) return;
       if(ui.pv&&ui.pv.url) URL.revokeObjectURL(ui.pv.url);
       ui.pv={key:key,out:out};paintPreview();
@@ -2511,7 +2575,7 @@ function printViewHTML(){
 /* Save PDF: the full-quality file (the wall calendar's preview already is it) */
 function printSave(){
   if(exporting) return;exporting=true;paintPreview();
-  var pv=ui.pv,kind=printKind(),p=kind==='wall'&&pv&&pv.out&&pv.out.blob&&pv.key===printKey()?Promise.resolve(pv.out):makePdf({kind:kind,size:lsGet('fl-wall','24x36')});
+  var pv=ui.pv,kind=printKind(),p=kind==='wall'&&pv&&pv.out&&pv.out.blob&&pv.key===printKey()?Promise.resolve(pv.out):makePdf({kind:kind});
   p.then(function(out){return saveFile(out.name,out.blob,'application/pdf');}).then(function(){toast('PDF saved.');},function(e){
     var c=e&&e.code;
     if(c==='declined') toast('Export cancelled.');
@@ -2520,52 +2584,52 @@ function printSave(){
     else toast('Couldn’t make the PDF. Try again.');
   }).then(function(){exporting=false;paintPreview();});
 }
-function orientRow(){var por=ui.orient==='portrait';return '<div class="row"><span class="flab">Page</span><div class="seg" role="group" aria-label="Page orientation"><button data-act="orient" data-o="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="orient" data-o="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';}
+var PLBL={bday:'Birthdays',anniv:'Anniversaries',yz:'Yahrzeits',other:'Other dates',hol:'Holidays',greg:'English calendar',heb:'Hebrew calendar',en:'English names',counts:'Children & grandchildren',split:'Pages',hq:'High quality',date:'Printed date',foot:'Page footer',legend:'Legend'};
+function pChk(o,na,k,label){var dis=na[k];return '<label class="check'+(dis?' dis':'')+'"'+(dis?' title="'+esc(dis)+'"':'')+'><input type="checkbox" data-popt="'+k+'"'+(o[k]&&!dis?' checked':'')+(dis?' disabled':'')+'>'+(label||PLBL[k])+'</label>';}
+function naNote(na,keys){var n=keys.filter(function(k){return na[k];});return n.length?'<p class="note">'+n.map(function(k){return PLBL[k]+': '+na[k];}).join(' · ')+'</p>':'';}
 function printPane(t){
-  var h='',heb=ui.calMode==='heb';
-  var hebSeg='<div class="seg" role="group" aria-label="Calendar"><button data-act="calmode" data-m="greg" aria-pressed="'+!heb+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+heb+'">Hebrew</button></div>';
+  var k=printKind(),o=popt(k),na=PNA[k]||{},heb=ui.calMode==='heb',h='';
+  var TITLES={tree:['Family tree','The family tree, card by card.'],calendar:['Calendar','A month, a whole year, or the wall calendar. In Hebrew everything reads right to left.'],upcoming:['Upcoming dates','The coming birthdays, anniversaries and yahrzeits, as a list.'],people:['Family directory','Everyone in the family with their details, as a list.']};
+  h='<h3>'+TITLES[t][0]+'</h3><p class="lead">'+TITLES[t][1]+'</p>';
+  /* 1 · what to print (the only group that differs) */
+  h+='<div class="sec"><b>What to print</b>';
   if(t==='tree'){
-    var o=tpdf(),cb=function(k,label){return '<label class="check"><input type="checkbox" data-tpdf="'+k+'"'+(o[k]?' checked':'')+'>'+label+'</label>';};
-    var roots=treeRoots(),root=currentRoot(),inList=false;
-    h='<h3>Family tree</h3><p class="lead">The tree as on the Family tree tab — change what it shows here or there.</p>';
-    h+='<div class="sec tpo"><b>What to print</b><div class="row"><label class="flab" for="p-root">Start from</label><select class="sel" id="p-root" data-act-change="tree-root" style="max-width:100%">';
-    roots.forEach(function(p){var on=p.id===root||spousesOf(p.id).some(function(s){return s.pid===root;});if(on) inList=true;h+='<option value="'+esc(p.id)+'"'+(on?' selected':'')+'>'+esc(coupleLabel(p))+'</option>';});
-    if(!inList&&P(root)) h+='<option value="'+esc(root)+'" selected>'+esc(coupleLabel(P(root)))+'</option>';
-    h+='</select></div><div class="row"><label class="flab" for="p-layout">Layout</label><select class="sel" id="p-layout" data-act-change="tree-layout">';
+    h+='<div class="row"><label class="flab" for="p-layout">Layout</label><select class="sel" id="p-layout" data-act-change="tree-layout">';
     TREE_LAYOUTS.forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.treeLayout===x[0]?' selected':'')+'>'+x[1]+'</option>';});
-    h+='</select><label class="flab" for="p-style">Style</label><select class="sel" id="p-style" data-act-change="tree-style">';
+    h+='</select></div><div class="row"><label class="flab" for="p-style">Style</label><select class="sel" id="p-style" data-act-change="tree-style">';
     TREE_STYLES.forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.treeStyle===x[0]?' selected':'')+'>'+x[1]+'</option>';});
-    h+='</select></div><div class="row"><span class="flab">Direction</span>'+hebSeg+'</div></div>';
-    h+='<div class="sec tpo"><b>Paper</b>'+orientRow()+'<div class="row"><label class="flab" for="tp-paper">Size</label><select class="sel" id="tp-paper" data-tpdf="paper">';
-    Object.keys(PAPERS).forEach(function(k){h+='<option value="'+k+'"'+(o.paper===k?' selected':'')+'>'+PAPERS[k][2]+'</option>';});
-    h+='</select></div><div class="row"><label class="flab" for="tp-split">Pages</label><select class="sel" id="tp-split" data-tpdf="split"><option value="0">Whole tree on one page</option>';
-    [2,3,4,5].forEach(function(n){h+='<option value="'+n+'"'+(o.split===n?' selected':'')+'>Split over pages, '+n+' across (tape together)</option>';});
-    h+='</select></div><div class="row"><span class="flab">Quality</span>'+cb('hq','High quality — sharper, for a print shop (bigger file)')+'</div></div>';
-    h+='<div class="sec tpo"><b>Heading</b><div class="row"><label class="flab" for="tp-title">Title</label><input class="inp" id="tp-title" data-tpdf="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div><div class="row"><span class="flab">Show</span>'+cb('date','Printed date')+cb('foot','Page footer')+cb('legend','Legend of the lines')+'</div></div>';
-    h+='<div class="sec tpo"><b>On the cards</b><div class="row">'+cb('en','English names')+cb('dates','Dates & ages')+cb('hebd','Hebrew birth dates')+cb('counts','Children & grandchildren')+cb('yz','Yahrzeits')+'</div></div>';
-    return h;
-  }
-  if(t==='calendar'){
-    var mt=monthTitle(),yt=yearTitle(),cw=lsGet('fl-wall','24x36');
-    h='<h3>Calendar</h3><p class="lead">Uses the dates chosen here and on the Calendar tab. In Hebrew everything reads right to left.</p>';
-    h+='<div class="sec"><b>What to include</b><div class="row"><span class="flab">Calendar</span>'+hebSeg+'</div>'+filtersHTML()+whoHTML('p-who')+orientRow()+'</div>';
-    var ck=ui.calKind||'month',kseg=function(k,l){return '<button data-act="print-kind" data-k="'+k+'" aria-pressed="'+(ck===k)+'">'+l+'</button>';};
-    h=h.replace('<div class="sec"><b>What to include</b>','<div class="sec"><b>What to print</b><div class="row"><div class="seg" role="group" aria-label="Calendar kind">'+kseg('month','One month')+kseg('year','A whole year')+kseg('wall','Wall calendar')+'</div></div>'
-      +(ck==='month'?'<div class="row"><button class="btn sm ghost" data-act="p-month" data-d="-1" aria-label="Previous month">‹</button><b>'+esc(mt.t)+'</b><button class="btn sm ghost" data-act="p-month" data-d="1" aria-label="Next month">›</button><span class="note">one page, names in each day</span></div>'
-       :'<div class="row"><button class="btn sm ghost" data-act="p-year" data-d="-1" aria-label="Previous year">‹</button><b>'+esc(yt.t)+'</b><button class="btn sm ghost" data-act="p-year" data-d="1" aria-label="Next year">›</button><span class="note">'+(ck==='year'?'small months, names listed below':'one large sheet for a plotter or print shop')+'</span></div>')
-      +(ck==='wall'?'<div class="row"><label class="flab" for="wall-size">Sheet size</label><select class="sel" id="wall-size" data-act-change="wall-size">'+Object.keys(WALL_SIZES).map(function(k){return '<option value="'+k+'"'+(k===cw?' selected':'')+'>'+WALL_SIZES[k][2]+'</option>';}).join('')+'</select></div>':'')
-      +'</div><div class="sec"><b>What to include</b>');
-    return h;
-  }
-  if(t==='upcoming'){
-    h='<h3>Upcoming dates</h3><p class="lead">A list of the coming birthdays, anniversaries and yahrzeits.</p>';
-    h+='<div class="sec"><b>What to include</b><div class="row"><label class="flab" for="p-horizon">How far ahead</label><select class="sel" id="p-horizon" data-act-change="p-horizon">';
+    h+='</select></div>';
+  } else if(t==='calendar'){
+    var ck=ui.calKind||'month',mt=monthTitle(),yt=yearTitle(),kseg=function(x,l){return '<button data-act="print-kind" data-k="'+x+'" aria-pressed="'+(ck===x)+'">'+l+'</button>';};
+    h+='<div class="row"><div class="seg" role="group" aria-label="Calendar kind">'+kseg('month','One month')+kseg('year','A whole year')+kseg('wall','Wall calendar')+'</div></div>';
+    h+=ck==='month'?'<div class="row"><button class="btn sm ghost" data-act="p-month" data-d="-1" aria-label="Previous month">‹</button><b>'+esc(mt.t)+'</b><button class="btn sm ghost" data-act="p-month" data-d="1" aria-label="Next month">›</button></div>'
+      :'<div class="row"><button class="btn sm ghost" data-act="p-year" data-d="-1" aria-label="Previous year">‹</button><b>'+esc(yt.t)+'</b><button class="btn sm ghost" data-act="p-year" data-d="1" aria-label="Next year">›</button></div>';
+  } else if(t==='upcoming'){
+    h+='<div class="row"><label class="flab" for="p-horizon">How far ahead</label><select class="sel" id="p-horizon" data-act-change="p-horizon">';
     [[30,'The next 30 days'],[90,'The next 90 days'],[180,'The next 6 months'],[365,'The next year']].forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.horizon===x[0]?' selected':'')+'>'+x[1]+'</option>';});
     if([30,90,180,365].indexOf(ui.horizon)<0) h+='<option value="'+ui.horizon+'" selected>The next '+ui.horizon+' days</option>';
-    return h+'</select></div>'+filtersHTML()+orientRow()+'</div>';
+    h+='</select></div>';
+  } else {
+    h+='<div class="row"><label class="flab" for="p-sort">Sort by</label><select class="sel" id="p-sort" data-popt="sort">'+[['last','Last name'],['first','First name'],['birth','Birth date (oldest first)']].map(function(x){return '<option value="'+x[0]+'"'+(o.sort===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')+'</select></div>';
   }
-  h='<h3>Family directory</h3><p class="lead">Everyone in the family, by last name: Hebrew and English names, birth dates, ages, husband or wife, children and grandchildren.</p>';
-  return h+'<div class="sec"><b>Paper</b>'+orientRow()+'</div>';
+  h+='<div class="row"><span class="flab">Direction</span><div class="seg" role="group" aria-label="Direction"><button data-act="calmode" data-m="greg" aria-pressed="'+!heb+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+heb+'">Hebrew</button></div></div></div>';
+  /* 2 · whose family */
+  var cur=o.who&&P(o.who)?o.who:'',ppl=data.people.filter(function(p){return kidsOf(p.id).length||spousesOf(p.id).length||p.id===cur;}).sort(function(a,b){return primaryText(a).localeCompare(primaryText(b));});
+  h+='<div class="sec"><b>Whose family</b><div class="row"><select class="sel" id="p-who" data-popt="who" aria-label="Whose family" style="max-width:100%"><option value="">Everyone</option>'+ppl.map(function(p){return '<option value="'+esc(p.id)+'"'+(p.id===cur?' selected':'')+'>From '+esc(primaryText(p))+' down</option>';}).join('')+'</select></div></div>';
+  /* 3 · show */
+  h+='<div class="sec"><b>Show</b><div class="row">'+pChk(o,na,'bday')+pChk(o,na,'anniv')+pChk(o,na,'yz')+pChk(o,na,'other')+pChk(o,na,'hol')+'</div>';
+  h+='<div class="row"><span class="flab">Dates by</span>'+pChk(o,na,'greg')+pChk(o,na,'heb')+'</div>';
+  h+='<div class="row">'+pChk(o,na,'en')+pChk(o,na,'counts')+'</div>'+naNote(na,['bday','anniv','yz','other','hol','greg','heb','en','counts'])+'</div>';
+  /* 4 · paper */
+  var por=o.orient==='portrait';
+  h+='<div class="sec"><b>Paper</b><div class="row"><span class="flab">Orientation</span><div class="seg" role="group" aria-label="Orientation"><button data-act="popt" data-k="orient" data-v="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="popt" data-k="orient" data-v="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';
+  h+='<div class="row"><label class="flab" for="p-paper">Size</label><select class="sel" id="p-paper" data-popt="paper">'+Object.keys(PAPERS).map(function(x){return '<option value="'+x+'"'+(o.paper===x?' selected':'')+'>'+PAPERS[x][2]+'</option>';}).join('')+'</select></div>';
+  h+='<div class="row'+(na.split?' dis':'')+'"><label class="flab" for="p-split">Pages</label><select class="sel" id="p-split" data-popt="split"'+(na.split?' disabled':'')+'><option value="0">'+(k==='tree'||k==='month'?'All on one page':'As many pages as needed')+'</option>'+[2,3,4,5].map(function(n){return '<option value="'+n+'"'+(!na.split&&o.split===n?' selected':'')+'>Split over pages, '+n+' across (tape together)</option>';}).join('')+'</select></div>';
+  h+='<div class="row"><span class="flab">Quality</span>'+pChk(o,na,'hq','High quality — sharper, for a print shop (bigger file)')+'</div>'+naNote(na,['split','hq'])+'</div>';
+  /* 5 · heading */
+  h+='<div class="sec"><b>Heading</b><div class="row"><label class="flab" for="p-title">Title</label><input class="inp" id="p-title" data-popt="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div>';
+  h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend'])+'</div>';
+  return h;
 }
 var HEB=/[֐-׿]/,STRONG=/[A-Za-zÀ-ɏ֐-׿]/;
 function rgb(h){h=h.replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -2672,22 +2736,24 @@ function coupleText(e){
 function wallSegs(e){
   var p=P(e.pids[0]),segs=e.cal==='heb'&&ui.calMode!=='heb'?[{t:'א ',c:'#6A4899',b:true}]:[];
   switch(e.kind){
-    case 'birthday':segs=segs.concat(nameSegs(p));if(e.n!=null&&!noAge(p)) segs.push({t:' · '+e.n});break;
+    case 'birthday':segs=segs.concat(nameSegs(p));if(PRN&&PRN.en&&hebName(p)) segs.push({t:' ('+fullName(p)+')'});if(e.n!=null&&!noAge(p)) segs.push({t:' · '+e.n});break;
     case 'anniversary':segs.push({t:coupleText(e),b:true},{t:' · '+ord(e.n)});break;
-    case 'yahrzeit':segs=segs.concat(nameSegs(p,true));segs.push({t:' · '+ord(e.n)});break;
+    case 'yahrzeit':segs=segs.concat(nameSegs(p,true));if(PRN&&PRN.en&&hebName(p)) segs.push({t:' ('+fullName(p)+')'});segs.push({t:' · '+ord(e.n)});break;
     default:segs.push({t:(e.title||'Anniversary')+' · '});segs=segs.concat(nameSegs(p));
   }
   return segs;
 }
 function loadPdfLib(){return window.jspdf&&window.jspdf.jsPDF?Promise.resolve():loadScript(LIB_PDF);}
-function makeWall(size){
-  var dims=WALL_SIZES[size]||WALL_SIZES['24x36'];
+function makeWall(o){
+  var pp=PAPERS[o.paper]||PAPERS.p24,dims=[pp[1],pp[0]];
   return loadPdfLib().then(function(){
-    var por=ui.orient==='portrait',W=(por?dims[1]:dims[0])*72,Hh=(por?dims[0]:dims[1])*72,M=0.45*72,G=0.2*72;
+    PRN=Object.assign({},o,{kind:'wall'});
+    var por=o.orient==='portrait',W=(por?dims[1]:dims[0])*72,Hh=(por?dims[0]:dims[1])*72,M=0.45*72,G=0.2*72;
     var pdf=new window.jspdf.jsPDF({orientation:por?'portrait':'landscape',unit:'pt',format:[W,Hh],compress:true});
     pdf.addFileToVFS('Alef-Regular.ttf',$('#font-alef-regular').textContent.trim());pdf.addFont('Alef-Regular.ttf','Alef','normal');
     pdf.addFileToVFS('Alef-Bold.ttf',$('#font-alef-bold').textContent.trim());pdf.addFont('Alef-Bold.ttf','Alef','bold');
-    pdf.setProperties({title:data.meta.familyName+' — '+yearTitle().t+(whoTitle()?' — '+whoTitle():''),creator:'Family Luach'});
+    var ttl=o.title.trim()||data.meta.familyName;
+    pdf.setProperties({title:ttl+' — '+yearTitle().t+(prnWho(o)?' — '+prnWho(o):''),creator:'Family Luach'});
     var T=vecText(pdf),INK='#19222D',INK2='#46515E',INK3='#77818D',LINE='#D3D9D0';
     function fill(hex){var c=rgb(hex);pdf.setFillColor(c[0],c[1],c[2]);}
     function stroke(hex,w){var c=rgb(hex);pdf.setDrawColor(c[0],c[1],c[2]);pdf.setLineWidth(w);}
@@ -2697,18 +2763,19 @@ function makeWall(size){
     var tH=Math.max(16,mH*0.08),wdH=Math.max(9,mH*0.042),dW=mW/7,dH=(mH-tH-wdH)/6;
     var fs=Math.max(6,Math.min(15,Math.min(dH/5.6,dW/9))),nfs=fs*1.2;
     var by={};
-    eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(calFilter()).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
+    eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(evFilter(o)).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
     /* header */
-    var who=calWho();
-    T.draw([{t:data.meta.familyName,b:true}].concat(who?[{t:'  ·  Family of ',c:INK2},{t:coupleLabel(who),c:INK2}]:[]),M,M+headH*0.5,headH*0.42,'left');
+    var who=o.who?P(o.who):null;
+    T.draw([{t:ttl,b:true}].concat(who?[{t:'  ·  Family of ',c:INK2},{t:coupleLabel(who),c:INK2}]:[]),M,M+headH*0.5,headH*0.42,'left');
     T.draw([{t:yt.t+' · ',c:INK2,b:true},{t:yt.he,c:INK2,b:true},{t:' · '+yt.sub,c:INK2,b:true}],M,M+headH*0.86,headH*0.2,'left');
     var legend=[['birthday','Birthday'],['hbirthday','Hebrew birthday'],['anniversary','Anniversary'],['yahrzeit','Yahrzeit'],['other','Other date'],['holiday','Holiday']];
     var ls=fs*1.15,lx=W-M,ly=M+headH*0.45;
-    legend.slice().reverse().forEach(function(k){
+    if(o.legend) legend.slice().reverse().forEach(function(k){
       var w=T.width([{t:k[1]}],ls);lx-=w;T.draw([{t:k[1],c:INK2}],lx,ly,ls,'left');
       lx-=ls*0.35+ls*0.9;fill(KHEX[k[0]]);pdf.rect(lx,ly-ls*0.8,ls*0.9,ls*0.9,'F');lx-=ls*1.6;
     });
-    T.draw((heb?[]:[{t:'א',c:'#6A4899',b:true},{t:' = kept by the Hebrew date · ',c:INK3}]).concat([{t:'numbers are the age or year being marked · Printed '+fmtG(TODAY),c:INK3}]),W-M,M+headH*0.86,ls,'right');
+    var note=(o.legend?(heb?[]:[{t:'א',c:'#6A4899',b:true},{t:' = kept by the Hebrew date · ',c:INK3}]).concat([{t:'numbers are the age or year being marked',c:INK3}]):[]).concat(o.date?[{t:(o.legend?' · ':'')+'Printed '+fmtG(TODAY),c:INK3}]:[]);
+    if(note.length) T.draw(note,W-M,M+headH*0.86,ls,'right');
     stroke(INK,2.2);pdf.line(M,M+headH,W-M,M+headH);
     /* months */
     var top=M+headH+G;
@@ -2769,7 +2836,8 @@ function makeWall(size){
         if(hidden) T.draw([{t:'+'+hidden+' more',c:INK3}],heb?dx+dW-3.5-5:dx+3.5+5,yy+plan.lh*0.8,plan.s*0.9,heb?'right':'left');
       }
     });
-    var name=(data.meta.familyName+' - Wall calendar '+yt.t+(calWho()?' - '+primaryText(calWho()):'')+' ('+dims[1]+'x'+dims[0]+' in'+(por?', portrait':'')+')').replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
+    PRN=null;
+    var name=(data.meta.familyName+' - Wall calendar '+yt.t+(who?' - '+primaryText(who):'')+' ('+pp[2].replace(/^Poster /,'').replace(/ in$/,'')+(por?', portrait':'')+')').replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
     return {blob:pdf.output('blob'),name:name,pages:1};
   });
 }
@@ -3179,6 +3247,7 @@ document.addEventListener('click',function(e){
     case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;if(ui.pv&&ui.pv.url) URL.revokeObjectURL(ui.pv.url);ui.pv=null;if(ui.pdfMenu) ui.printTab={calendar:'calendar',upcoming:'upcoming',people:'people'}[ui.view]||'tree';render();break;
     case 'print-tab':ui.printTab=t.dataset.t;render();break;
     case 'print-kind':ui.calKind=t.dataset.k;render();break;
+    case 'popt':popt(printKind())[t.dataset.k]=t.dataset.v;savePopt();render();break;
     case 'print-save':printSave();break;
     case 'p-month':var dm=+t.dataset.d;if(ui.calMode==='heb') ui.hCur=dm>0?hNext(ui.hCur):hPrev(ui.hCur);else{var gm=ui.gCur.m+dm;ui.gCur={y:ui.gCur.y+(gm>12?1:gm<1?-1:0),m:gm>12?1:gm<1?12:gm};}render();break;
     case 'p-year':var dy=+t.dataset.d;if(ui.calMode==='heb') ui.hCur={y:ui.hCur.y+dy,m:ui.hCur.m===13&&!H.leap(ui.hCur.y+dy)?12:ui.hCur.m};else ui.gCur={y:ui.gCur.y+dy,m:ui.gCur.m};render();break;
@@ -3319,6 +3388,7 @@ document.addEventListener('change',function(e){
   if(t.id==='f-father'||t.id==='f-mother'){refreshHebPreview();return;}
   if(/^m-sp-\d+$/.test(t.id)){var nm=$('#m-nm-'+t.id.slice(5));if(nm) nm.hidden=!!t.value;return;}
   if(t.id==='import-file'&&t.files&&t.files[0]){importData(t.files[0]);t.value='';return;}
+  if(t.dataset&&t.dataset.popt){var po2=popt(printKind()),pk=t.dataset.popt;po2[pk]=t.type==='checkbox'?t.checked:(pk==='split'?(+t.value||0):t.value);savePopt();if(pk==='who'||pk==='sort') render();else schedulePreview();return;}
   if(t.dataset&&t.dataset.tpdf){var to=tpdf(),tk=t.dataset.tpdf;to[tk]=t.type==='checkbox'?t.checked:(tk==='split'?(+t.value||0):t.value);lsSet('fl-tpdf',to);if(ui.pdfMenu) schedulePreview();return;}
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;setCalWho(t.value);ui.zoomFit=true;render();}
