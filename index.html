@@ -268,8 +268,6 @@ button:disabled{cursor:default;opacity:.6}
 .tcard>span.tn,.tcard>span.tl{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.15}
 .tcard .tn.long{font-size:13.5px}.tcard .tn.xlong{font-size:12px}
 .tcard:hover{border-color:var(--accent);box-shadow:0 2px 10px color-mix(in srgb,var(--accent) 18%,transparent)}
-.tini{display:none;position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:50%;background:#3B82F6;color:#fff;font:700 12px Heebo,Assistant,sans-serif;align-items:center;justify-content:center;line-height:1}
-.tcard.f .tini{background:#EC4899}
 .tcard .tn{font-family:var(--display);font-weight:500;font-size:16px}
 .tcard .tl{font-size:12px;color:var(--ink-3)}
 .tcard .td{font-size:12px;color:var(--ink-2)}
@@ -1064,7 +1062,6 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
   if(par.length&&!isRoot&&!par.some(function(x){return placed[x];})) h+='<button class="upbtn" data-act="root" data-pid="'+esc(par[0])+'" title="Show this side of the family">↑ '+(p.hebFirst?'<bdi dir="rtl" lang="he">'+esc(p.hebFirst)+'</bdi> — family':esc(p.first||'Their')+'’s family')+'</button>';
   var gsp=ghost?spousesOf(p.id).map(function(s){var q=P(s.pid);return q.hebFirst||q.first||'';}).filter(Boolean):[];
   h+='<button class="tcard'+(p.gender?' '+p.gender:'')+(p.deceased?' dec':'')+(isRoot?' root':'')+(ghost?' ghost':'')+'" data-act="'+(ghost?'goto':'open')+'" data-pid="'+esc(p.id)+'" title="'+esc(ghost?'Also shown next to '+(gsp.join(' & ')||'their husband or wife')+' — tap to go there':primaryText(p)+(hn?' — '+fullName(p):''))+'">';
-  var ini=(hn?p.hebFirst:p.first)||'';if(ini) h+='<span class="tini" aria-hidden="true">'+esc(Array.from(ini)[0])+'</span>';
   if(hn){
     h+='<span class="tn he'+(hn.length>40?' xlong':hn.length>24?' long':'')+'" dir="rtl" lang="he">'+hebPartsHTML(p)+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     h+='<span class="tl">'+esc(fullName(p))+'</span>';
@@ -1237,8 +1234,9 @@ function marSegs(items,g,xs,sh,cls){
 /* For the Branches style: a branch from where a family's children hang (the ⚭, or the bottom of a lone
    parent's card) to each child's card. The straight lines it replaces are marked "kid". */
 function kidEdges(items,i0,ax,ay,ends,depth){
+  /* db: how far below the start the parents' cards end (the branch drops that far before it curves) */
   for(var k=i0;k<items.length;k++){var it=items[k];if(it.t==='h'||it.t==='v'||it.t==='el') it.kid=1;}
-  ends.forEach(function(e){items.push({t:'edge',x:ax,y:ay,dx:e[0]-ax,dy:e[1]-ay,d:depth});});
+  ends.forEach(function(e){items.push({t:'edge',x:ax,y:ay,dx:e[0]-ax,dy:e[1]-ay,db:Math.max(0,TH-ay),d:depth});});
 }
 function kidBars(items,xs,y,subs){subs.forEach(function(x,i){if(!x.stack) bar(items,xs[i]+0.75,y,'t');});}
 function marriageOrd(m){
@@ -1353,7 +1351,7 @@ if(!TREE_LAYOUTS.some(function(o){return o[0]===ui.treeLayout;})) ui.treeLayout=
 var TREE_STYLES=[['classic','Classic'],['modern','Modern'],['floral','Floral'],['embellished','Embellished'],['branches','Branches'],['vintage','Vintage'],['watercolor','Watercolor'],['evening','Evening']];
 if(ui.treeStyle==='tree') ui.treeStyle='branches';
 if(!TREE_STYLES.some(function(o){return o[0]===ui.treeStyle;})) ui.treeStyle='classic';
-var TS_FONTS={modern:'Heebo:wght@400;500;700',floral:'Bellefair',embellished:'David+Libre:wght@400;700',vintage:'Noto+Serif+Hebrew:wght@400;600&family=Noto+Serif:ital@0;1',watercolor:'Amatic+SC:wght@400;700'};
+var TS_FONTS={modern:'Heebo:wght@400;500;600;800',floral:'Bellefair',embellished:'David+Libre:wght@400;700',vintage:'Noto+Serif+Hebrew:wght@400;600&family=Noto+Serif:ital@0;1',watercolor:'Amatic+SC:wght@400;700'};
 /* (an explicit width and height, so the PDF renderer draws it at the size of its box) */
 function svgUrl(inner,vb,extra){var d=vb.split(' ');return 'url("data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="'+vb+'" width="'+d[2]+'" height="'+d[3]+'"'+(extra||'')+'>'+inner+'</svg>')+'")';}
 /* little drawing helpers for the ornaments */
@@ -1376,7 +1374,7 @@ function tsCSS(){
   /* Branches: two small leaves on top of every oval frame */
   var sprout=svgUrl(svLeaf(39,29,-152,36,'#86AD5E')+svLeaf(41,29,-28,36,'#9DC079'),'0 0 80 32');
   var S={
-    modern:'--surface:#EEF4FC;--bg:#F1F5F9;--ink:#111827;--ink-2:#334155;--ink-3:#64748B;--line-2:#CBD5E1;--c-anniversary:#334155;--accent:#2563EB;',
+    modern:'--surface:#FFFFFF;--bg:#F8FAFC;--ink:#0F172A;--ink-2:#334155;--ink-3:#64748B;--line-2:#CBD5E1;--c-anniversary:#0F172A;--accent:#2563EB;',
     floral:'--surface:#FFFDF9;--bg:#FBF1F3;--ink:#5C3A42;--ink-2:#6E5A5E;--ink-3:#8C7A7E;--line-2:#9DBB95;--c-anniversary:#D98FA3;--accent:#B45C74;',
     embellished:'--surface:#FFFBF0;--bg:#F3EAD6;--ink:#4A1219;--ink-2:#5E4B35;--ink-3:#7D6A4B;--line-2:#9C7A2E;--c-anniversary:#7A1F2B;--accent:#7A1F2B;',
     branches:'--surface:#FFFDF7;--bg:#F1E9DA;--ink:#2A2418;--ink-2:#4E4637;--ink-3:#6E6452;--line-2:#7A5634;--c-anniversary:#7A5634;--accent:#7A4E22;',
@@ -1384,7 +1382,7 @@ function tsCSS(){
     watercolor:'--surface:#FFFFFF;--bg:transparent;--ink:#3D3750;--ink-2:#55506A;--ink-3:#6F6A80;--line-2:#9AA5BD;--c-anniversary:#E58FA5;--accent:#6D5BA8;',
     evening:'--surface:#1D2B3D;--bg:#172433;--ink:#F4EBD6;--ink-2:#C9D3E0;--ink-3:#9FB0C6;--line-2:#5B6B80;--c-anniversary:#D4AF5A;--accent:#E7C77A;'
   };
-  var BG={modern:'#FFFFFF',floral:'#FBF4EC '+sprinkle+' repeat',embellished:'#F6F0E1',branches:'#F7F2E7',vintage:paper+' repeat',watercolor:'#FFFFFF',evening:'#14202E'};
+  var BG={modern:'#F4F6FA',floral:'#FBF4EC '+sprinkle+' repeat',embellished:'#F6F0E1',branches:'#F7F2E7',vintage:paper+' repeat',watercolor:'#FFFFFF',evening:'#14202E'};
   var c='';
   Object.keys(S).forEach(function(n){
     c+='.ts-'+n+'{'+S[n]+'color:var(--ink)}\n.tree-wrap.ts-'+n+',.tsw.ts-'+n+'{background:'+BG[n]+'}\n';
@@ -1392,9 +1390,14 @@ function tsCSS(){
   });
   c+='.tsw{width:max-content;margin:0 auto;padding:30px 28px;border-radius:16px}\n';
   /* Modern */
-  c+='.ts-modern .tcard{border:1px solid #E2E8F0;border-radius:18px;box-shadow:0 2px 10px rgba(15,23,42,.10);font-family:Heebo,Assistant,sans-serif}.ts-modern .tcard.f{background:#FCEFF4}.ts-modern .tcard.dec,.ts-modern .tcard.ghost{background:#F1F5F9;border:1px dashed #CBD5E1}\n';
-  c+='.ts-modern .tcard .tn,.ts-modern .tcard .tn.he{font-family:Heebo,Assistant,sans-serif;font-weight:700}.ts-modern .tini{display:flex}\n';
-  c+='.ts-modern .fring{border-radius:50%;border:1.5px solid #334155;background:#fff}.ts-modern .otree .oc{border-color:#CBD5E1}\n';
+  /* white cards, soft shadow, a small colour tab on top (blue / pink), bold sans-serif, dates in a pill */
+  c+='.ts-modern .tcard{border:1px solid #E6EAF0;border-radius:20px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05),0 10px 28px rgba(15,23,42,.07);font-family:Heebo,Assistant,sans-serif;padding-top:16px;gap:3px}\n';
+  c+='.ts-modern .tcard::before{content:"";position:absolute;top:9px;left:50%;margin-left:-14px;width:28px;height:4px;border-radius:2px;background:#3B82F6}.ts-modern .tcard.f::before{background:#EC4899}.ts-modern .tcard.dec::before,.ts-modern .tcard.ghost::before{background:#94A3B8}\n';
+  c+='.ts-modern .tcard.dec,.ts-modern .tcard.ghost{background:#F8FAFC;border:1px dashed #CBD5E1;box-shadow:none}\n';
+  c+='.ts-modern .tcard .tn,.ts-modern .tcard .tn.he{font-family:Heebo,Assistant,sans-serif;font-size:16px;letter-spacing:-.01em}.ts-modern .tcard .nm{font-weight:800}.ts-modern .tcard .np{font-weight:400;color:#475569}\n';
+  c+='.ts-modern .tcard .tl{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#94A3B8}.ts-modern .tcard .tk{font-size:10.5px;color:#94A3B8}\n';
+  c+='.ts-modern .tcard .td,.ts-modern .tcard .tyz{align-self:center;background:#F1F5F9;border-radius:999px;padding:2px 10px;font-size:11.5px;font-weight:600;color:#334155}\n';
+  c+='.ts-modern .fring{border-radius:999px;background:#0F172A;color:#fff;padding:3px 6px;font-size:12px}.ts-modern .fring small{color:#CBD5E1}.ts-modern .fring .fwed{background:#F4F6FA;color:#0F172A}.ts-modern .otree .oc{border-color:#CBD5E1}\n';
   /* Floral */
   c+='.ts-floral .tcard{border:1.5px solid #E7AFC0;border-radius:26px;overflow:visible;font-family:Bellefair,"Frank Ruhl Libre",serif}\n';
   c+='.ts-floral .tcard::before{content:"";position:absolute;top:-26px;right:-22px;width:96px;height:66px;background:'+bouquet+' no-repeat center/contain;pointer-events:none}\n';
@@ -1440,9 +1443,9 @@ function branchSVG(L,w,h){
   function leafAt(x,y,a,s,c){var tr=' transform="translate('+x.toFixed(1)+' '+y.toFixed(1)+') rotate('+a.toFixed(0)+')"';return '<path d="M0 0C'+(s*.3).toFixed(1)+' '+(-s*.34).toFixed(1)+' '+(s*.7).toFixed(1)+' '+(-s*.34).toFixed(1)+' '+s+' 0C'+(s*.7).toFixed(1)+' '+(s*.34).toFixed(1)+' '+(s*.3).toFixed(1)+' '+(s*.34).toFixed(1)+' 0 0Z" fill="'+c+'"'+tr+'/>';}
   L.items.forEach(function(e){
     if(e.t!=='edge') return;
-    var x1=e.x,y1=e.y+TPAD,x2=e.x+e.dx,y2=e.y+e.dy+TPAD,wd=Math.max(2.8,5.2-e.d*0.9);
-    var p=[[x1,y1],[x1,y1+(y2-y1)*.55],[x2,y1+(y2-y1)*.45],[x2,y2]];
-    br+='<path d="M'+x1+' '+y1+'C'+p[1].join(' ')+' '+p[2].join(' ')+' '+x2+' '+y2+'" stroke-width="'+wd.toFixed(1)+'"/>';
+    var x1=e.x,y0=e.y+TPAD,x2=e.x+e.dx,y2=e.y+e.dy+TPAD,wd=Math.max(2.8,5.2-e.d*0.9);
+    var y1=Math.min(y2-30,y0+(e.db||0)+12),p=[[x1,y1],[x1,y1+(y2-y1)*.55],[x2,y1+(y2-y1)*.45],[x2,y2]];
+    br+='<path d="M'+x1+' '+y0+'V'+y1+'C'+p[1].join(' ')+' '+p[2].join(' ')+' '+x2+' '+y2+'" stroke-width="'+wd.toFixed(1)+'"/>';
     var len=Math.hypot(x2-x1,y2-y1),n=len<150?1:len<320?2:len<520?3:4;
     for(var i=0;i<n;i++){
       var t=n===1?.5:.3+i*.4/(n-1),q=pt(p,t),d=tan(p,t),a=Math.atan2(d[1],d[0])*180/Math.PI+(i%2?-48:48)+(x2<x1?180:0);
