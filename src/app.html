@@ -613,7 +613,7 @@ function hebNameZl(p){var n=hebName(p);return n&&p.deceased?n+' ז״ל':n;}
 function childWord(p){return p.gender==='m'?'Son':p.gender==='f'?'Daughter':'Child';}
 function genCounts(id){
   var counts=[],level=[id],seen={};seen[id]=1;
-  for(var g=0;g<8;g++){var next=[];level.forEach(function(x){kidsOf(x).forEach(function(c){if(!seen[c]){seen[c]=1;next.push(c);}});});if(!next.length) break;counts.push(next.length);level=next;}
+  for(var g=0;g<30;g++){var next=[];level.forEach(function(x){kidsOf(x).forEach(function(c){if(!seen[c]){seen[c]=1;next.push(c);}});});if(!next.length) break;counts.push(next.length);level=next;}
   return counts;
 }
 /* A person can ask not to have their age (or birth year) printed in PDFs; the app screen still shows it. */
@@ -1065,7 +1065,9 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
   if(dates) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
   if(p.deceased&&d) h+='<span class="tyz"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
   if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
-  if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gc[1]?' · '+gc[1]+' grand':'')+'</span>';
+  /* grandchildren and every generation below them (great-grandchildren and so on) */
+  var gd=gc.slice(1).reduce(function(x,y){return x+y;},0);
+  if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gd?' · '+gd+' grand':'')+'</span>';
   if(note){
     var pn=p.parents.map(function(q){q=P(q);return q?(q.hebFirst||q.first||''):'';}).filter(Boolean).map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ');
     h+='<span class="tk tlink" data-act="'+note.act+'" data-pid="'+esc(p.id)+'"'+(note.k?' data-k="'+esc(note.k)+'"':'')+' title="'+(note.act==='goto-copy'?'Go to the copy under their parents':'Show their parents’ family')+'">↩ '+(p.gender==='f'?'daughter':p.gender==='m'?'son':'child')+' of '+pn+(note.act==='open-branch'?' · show':'')+'</span>';
