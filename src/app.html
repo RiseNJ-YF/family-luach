@@ -1181,6 +1181,15 @@ function wedHTML(m){
   if(ui.calMode==='heb') return '<bdi dir="rtl" lang="he">'+esc(t)+'<br>'+esc(gem(hebOf(m.date,m.sunset).y%1000))+'</bdi>';
   return esc(t)+'<br>'+parseISO(m.date).y;
 }
+/* A marriage line drawn gap by gap: where it passes behind another husband's or wife's card it stops a
+   little short of that card on both sides, so it clearly goes under it; it only touches its own couple. */
+var MGAP=7;
+function marSegs(items,g,xs,sh,cls){
+  for(var k=g.i;k<g.j;k++){
+    var a=xs[k]+TW+sh+(k>g.i?MGAP:0),b=xs[k+1]+sh-(k+1<g.j?MGAP:0);
+    if(b>a) items.push({t:'h',x:a,y:g.ly,w:b-a,cls:cls});
+  }
+}
 function marriageOrd(m){
   function ix(pid){var l=spousesOf(pid);if(l.length<2) return -1;for(var i=0;i<l.length;i++) if(l[i].m===m) return i;return -1;}
   var i=ix(m.a);if(i<0) i=ix(m.b);
@@ -1242,7 +1251,7 @@ function layoutFam(id,seen,depth){
   chain.forEach(function(x,i){items.push({t:'card',id:x,x:xs[i]+sh,y:0,ghost:isCopyId(x)});});
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
-    items.push({t:'h',x:x1,y:g.ly,w:x2-x1,cls:'mar ms'+g.st+(ended?' ended':'')});
+    marSegs(items,g,xs,sh,'mar ms'+g.st+(ended?' ended':''));
     items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),wed:wedHTML(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
   });
   /* Bus heights: the group whose children sit farthest from its own marriage gets the highest line,
@@ -1383,7 +1392,7 @@ function layoutPack(id,seen,depth){
   ctAdd(ct,0,xs[0]+sh,xs[n-1]+TW+sh);
   marr.forEach(function(g){
     var x1=xs[g.i]+TW+sh,x2=xs[g.j]+sh,ended=g.m.divorced;
-    items.push({t:'h',x:x1,y:g.ly,w:x2-x1,cls:'mar ms'+g.st+(ended?' ended':'')});
+    marSegs(items,g,xs,sh,'mar ms'+g.st+(ended?' ended':''));
     items.push({t:'ring',x:g.gx+sh,y:g.ly,label:marriageOrd(g.m),wed:wedHTML(g.m),ended:ended,title:(ended?'Divorced':(g.m.date?'Married '+fmtG(isoAbs(g.m.date)):'Married'))});
   });
   var childY=TH+VG,maxSubH=0,LW=1.5;
