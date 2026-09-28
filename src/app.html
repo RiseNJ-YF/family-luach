@@ -611,6 +611,8 @@ function hebPartsHTML(p){var q=hebParts(p);return [q.first?'<b class="nm">'+esc(
 function hebName(p){if(!p) return '';var pr=parentsOf(p);return hebNameFrom({hebFirst:p.hebFirst,hebLast:p.hebLast,hebMaiden:p.hebMaiden,gender:p.gender,deceased:p.deceased,father:pr.father,mother:pr.mother,fatherHeb:p.fatherHeb,motherHeb:p.motherHeb});}
 function hebNameZl(p){var n=hebName(p);return n&&p.deceased?n+' ז״ל':n;}
 function childWord(p){return p.gender==='m'?'Son':p.gender==='f'?'Daughter':'Child';}
+/* Grandchildren and every generation below them (great-grandchildren and so on), each person once. */
+function grandTotal(gc){return gc.slice(1).reduce(function(a,b){return a+b;},0);}
 function genCounts(id){
   var counts=[],level=[id],seen={};seen[id]=1;
   for(var g=0;g<30;g++){var next=[];level.forEach(function(x){kidsOf(x).forEach(function(c){if(!seen[c]){seen[c]=1;next.push(c);}});});if(!next.length) break;counts.push(next.length);level=next;}
@@ -1066,7 +1068,7 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
   if(p.deceased&&d) h+='<span class="tyz"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
   if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
   /* grandchildren and every generation below them (great-grandchildren and so on) */
-  var gd=gc.slice(1).reduce(function(x,y){return x+y;},0);
+  var gd=grandTotal(gc);
   if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gd?' · '+gd+' grand':'')+'</span>';
   if(note){
     var pn=p.parents.map(function(q){q=P(q);return q?(q.hebFirst||q.first||''):'';}).filter(Boolean).map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ');
@@ -1873,7 +1875,7 @@ function peopleCards(){
     if(line) h+='<span class="pl">'+esc(line)+'</span>';
     if(p.deceased&&parseISO(p.death)) h+='<span class="pl"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
     if(sp.length) h+='<span class="pl">Married to <bdi>'+esc(sp.join(', '))+'</bdi></span>';
-    h+='<span class="kids"><span><b class="num">'+(gc[0]||0)+'</b>'+((gc[0]||0)===1?'child':'children')+'</span><span><b class="num">'+(gc[1]||0)+'</b>grandchildren</span>'+(gc[2]?'<span><b class="num">'+gc[2]+'</b>great-grand</span>':'')+'</span></button>';
+    h+='<span class="kids"><span><b class="num">'+(gc[0]||0)+'</b>'+((gc[0]||0)===1?'child':'children')+'</span><span><b class="num">'+grandTotal(gc)+'</b>grandchildren</span></span></button>';
     return h;
   }).join('');
 }
@@ -1919,7 +1921,7 @@ function drawerView(p){
   p.others.forEach(function(o){if(o.date) h+='<div class="fact"><div class="fl">'+esc(o.title||'Other date')+'</div><div class="fv">'+dateBlock(o.date,o.sunset)+'</div></div>';});
   h+='</div></section>';
   var gc=genCounts(p.id);
-  h+='<section class="dsec"><h4>Family</h4><div class="counts"><div class="count"><b class="num">'+(gc[0]||0)+'</b><span>'+((gc[0]||0)===1?'child':'children')+'</span></div><div class="count"><b class="num">'+(gc[1]||0)+'</b><span>grandchildren</span></div>'+(gc[2]?'<div class="count"><b class="num">'+gc[2]+'</b><span>great-grandchildren</span></div>':'')+'</div></section>';
+  h+='<section class="dsec"><h4>Family</h4><div class="counts"><div class="count"><b class="num">'+(gc[0]||0)+'</b><span>'+((gc[0]||0)===1?'child':'children')+'</span></div><div class="count"><b class="num">'+grandTotal(gc)+'</b><span>grandchildren</span></div></div></section>';
   h+='<section class="dsec rel-list">';
   var sp=spousesOf(p.id),multi=sp.length>1;
   if(sp.length) sp.forEach(function(s,i){
@@ -2270,7 +2272,7 @@ function exportSpec(kind){
       var born=b?(p.birthNoYear||na?fmtMD(b):fmtG(isoAbs(p.birth)))+(hb?'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hb,!na))+'</span>':''):'';
       var age=p.deceased?'ז״ל':(!na&&ageAt(p,TODAY)!=null?String(ageAt(p,TODAY)):'');
       var sp=spousesOf(p.id).map(function(s){return primaryText(P(s.pid))+(s.m.divorced?' (div.)':'');}).concat(soloOf(p.id).filter(function(m){return soloName(m);}).map(function(m){return soloName(m)+(m.divorced?' (div.)':'');})).join(', ');
-      return {html:'<div class="px-prow"><span class="n">'+nameHTML(p,true)+(p.phone?'<br><span style="font-weight:400;color:#77818D">'+esc(p.phone)+'</span>':'')+'</span><span>'+(hebName(p)?esc(fullName(p)):'')+'</span><span>'+born+'</span><span>'+esc(age)+'</span><span>'+esc(sp)+'</span><span>'+(gc[0]||0)+'</span><span>'+(gc[1]||0)+'</span></div>'};
+      return {html:'<div class="px-prow"><span class="n">'+nameHTML(p,true)+(p.phone?'<br><span style="font-weight:400;color:#77818D">'+esc(p.phone)+'</span>':'')+'</span><span>'+(hebName(p)?esc(fullName(p)):'')+'</span><span>'+born+'</span><span>'+esc(age)+'</span><span>'+esc(sp)+'</span><span>'+(gc[0]||0)+'</span><span>'+grandTotal(gc)+'</span></div>'};
     });
   } else {
     spec.title='Upcoming dates · '+fmtG(TODAY)+' – '+fmtG(TODAY+ui.horizon);spec.file='Upcoming dates';
