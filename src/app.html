@@ -719,10 +719,10 @@ function calFilter(){
   return function(e){return visible(e)&&(!e.pids.length||e.pids.some(function(x){return set[x];}));};
 }
 function whoTitle(){var p=calWho();return p?'Family of '+coupleLabel(p):'';}
-function whoHTML(){
+function whoHTML(id){
   var cur=calWho(),list=data.people.filter(function(p){return kidsOf(p.id).length||spousesOf(p.id).length||(cur&&p.id===cur.id);})
     .sort(function(a,b){return primaryText(a).localeCompare(primaryText(b));});
-  var h='<div class="filters" style="margin-top:8px"><label class="flabel" for="cal-who">Whose dates</label><select class="sel" id="cal-who" data-act-change="cal-who" style="min-width:0;text-overflow:ellipsis"><option value="">Everyone</option>';
+  var h='<div class="filters" style="margin-top:8px"><label class="flabel" for="'+(id||'cal-who')+'">Whose dates</label><select class="sel" id="'+(id||'cal-who')+'" data-act-change="cal-who" style="min-width:0;text-overflow:ellipsis"><option value="">Everyone</option>';
   list.forEach(function(p){h+='<option value="'+esc(p.id)+'"'+(cur&&cur.id===p.id?' selected':'')+'>From '+esc(primaryText(p))+' down</option>';});
   return h+'</select></div>';
 }
@@ -792,9 +792,9 @@ function render(){
     h+='<button class="tab" role="tab" data-act="view" data-v="'+t[0]+'" aria-selected="'+(ui.view===t[0])+'">'+t[1]+'</button>';
   });
   h+='</nav>';
-  if(data.people.length) h+='<button class="btn sm" data-act="pdf-menu" title="Save what’s on this tab as a PDF"'+(exporting?' disabled':'')+' aria-expanded="'+!!ui.pdfMenu+'">'+(exporting?'Preparing PDF…':'Export PDF ▾')+'</button>';
+  if(data.people.length) h+='<button class="btn sm" data-act="pdf-menu" title="Print or save a PDF of the tree, calendar, dates or directory" aria-haspopup="dialog">Print / PDF</button>';
   h+='</div>';
-  if(ui.pdfMenu&&!exporting) h+=pdfMenuHTML();
+  if(ui.pdfMenu) h+=printDialog();
   if(ui.pdfPrev) h+=pdfPrevHTML();
   if(editable()&&ui.panel==='settings') h+=settingsDialog();
   if(editable()&&data.meta.example&&!ui.panel) h+='<div class="banner"><span><b>This is an example family</b> so you can see how everything works. Replace it with your own when you’re ready.</span><button class="btn sm" data-act="panel" data-p="settings">Start my own family</button></div>';
@@ -2318,23 +2318,23 @@ function pxYearGlance(){
   return h+'</div>'+pxLegend();
 }
 function exportSpec(kind){
-  var hT=H.fromAbs(TODAY),span=kind==='month'||kind==='year'?kind:ui.calSpan;
+  var hT=H.fromAbs(TODAY);
   var spec={printed:'Printed '+fmtG(TODAY)+' · '+fmtH(hT),blocks:[],orient:ui.orient,fit:false,pageHead:'',title:'',file:'',body:''};
   var PW=ui.orient==='portrait'?816:1056;
-  if(ui.view==='calendar'&&span==='year'){
+  if(kind==='year'){
     var yt=yearTitle(),ms=yearMonths();
     spec.title='Year calendar · '+yt.t+' ('+yt.sub+')'+(whoTitle()?' · '+whoTitle():'');spec.file='Calendar '+yt.t+(calWho()?' - '+primaryText(calWho()):'');
     spec.blocks=[{html:'<div>'+pxYearGlance()+'</div>',breakAfter:true}].concat(listBlocks(ms[0].a0,ms[ms.length-1].a1,false,ui.calMode==='heb',calFilter()));
-  } else if(ui.view==='calendar'){
+  } else if(kind==='month'){
     var mt=monthTitle();
     spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub+(whoTitle()?' · '+whoTitle():'');spec.file='Calendar '+mt.t+(calWho()?' - '+primaryText(calWho()):'');spec.body=pxMonthGrid(PW-80);
-  } else if(ui.view==='tree'){
+  } else if(kind==='tree'){
     var root=currentRoot();
     spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';
     var tsc=useTreeStyle(ui.treeStyle);
     if(ui.treeLayout==='outline') spec.blocks=outlineParts(root,true).map(function(r){return {html:'<div class="otree'+tsc+(ui.calMode==='heb'?' rtl':'')+'">'+r+'</div>'};});
     else{spec.fit=true;spec.body=tsc?'<div class="tsw'+tsc+'">'+treeMarkup(root,true)+'</div>':treeMarkup(root,true);}
-  } else if(ui.view==='people'){
+  } else if(kind==='people'){
     spec.title='Family directory · '+data.people.length+' people';spec.file='Family directory';
     spec.pageHead='<div class="px-prow h"><span>Name</span><span>English name</span><span>Born</span><span>Age</span><span>Married to</span><span>Children</span><span>Grandchildren</span></div>';
     var list=data.people.slice().sort(function(a,b){var x=(a.last+' '+a.first).toLowerCase(),y=(b.last+' '+b.first).toLowerCase();return x<y?-1:x>y?1:0;});
@@ -2357,7 +2357,7 @@ function makePdf(opts){
   var stage=null,sy=window.scrollY||0;
   return loadLibs().then(function(){return document.fonts&&document.fonts.ready?document.fonts.ready:null;}).then(function(){
     /* the tree has its own options (paper, pages, title, what the cards show …) */
-    var o=ui.view==='tree'&&!opts.kind?tpdf():null,spec;
+    var o=opts.kind==='tree'?tpdf():null,spec;
     PDFOPT=o;try{spec=exportSpec(opts.kind);}finally{PDFOPT=null;}
     var land=spec.orient==='landscape',paper=o?PAPERS[o.paper]:PAPERS.letter,pin=land?[paper[1],paper[0]]:[paper[0],paper[1]];
     /* pages are laid out at 96 px per inch; a tree page starts letter-wide and is then fitted to the paper */
@@ -2436,35 +2436,60 @@ function makePdf(opts){
    sharp at any size. The PDF library lays text out left to right, so Hebrew is put in visual order
    here: each Hebrew word's letters are reversed and runs of Hebrew words are placed right to left. */
 var WALL_SIZES={'18x24':[24,18,'18 × 24 in (ARCH C)'],'24x36':[36,24,'24 × 36 in (ARCH D)'],'36x48':[48,36,'36 × 48 in (ARCH E)']};
-function pdfMenuHTML(){
-  var yt=yearTitle(),mt=monthTitle(),cur=lsGet('fl-wall','24x36'),por=ui.orient==='portrait';
-  var h='<section class="panel"><h3>Export as a PDF</h3>';
-  h+='<div class="row" style="margin-top:4px"><span class="flab">Page orientation</span><div class="seg" role="group" aria-label="Page orientation"><button data-act="orient" data-o="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="orient" data-o="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';
-  if(ui.view!=='calendar'){
-    var what={upcoming:'the upcoming dates',tree:'the family tree',people:'the family directory'}[ui.view]||'this tab';
-    if(ui.view==='tree'){
-      var o=tpdf(),cb=function(k,label){return '<label class="check"><input type="checkbox" data-tpdf="'+k+'"'+(o[k]?' checked':'')+'>'+label+'</label>';};
-      h+='<div class="tpo"><div class="row"><label class="flab" for="tp-paper">Paper</label><select class="sel" id="tp-paper" data-tpdf="paper">';
-      Object.keys(PAPERS).forEach(function(k){h+='<option value="'+k+'"'+(o.paper===k?' selected':'')+'>'+PAPERS[k][2]+'</option>';});
-      h+='</select><select class="sel" id="tp-split" data-tpdf="split" aria-label="Pages"><option value="0">Whole tree on one page</option>';
-      [2,3,4,5].forEach(function(n){h+='<option value="'+n+'"'+(o.split===n?' selected':'')+'>Split over pages, '+n+' across (tape together)</option>';});
-      h+='</select></div>';
-      h+='<div class="row"><label class="flab" for="tp-title">Title</label><input class="inp" id="tp-title" data-tpdf="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div>';
-      h+='<div class="row"><span class="flab">Page</span>'+cb('date','Printed date')+cb('foot','Page footer')+cb('legend','Legend of the lines')+'</div>';
-      h+='<div class="row"><span class="flab">On the cards</span>'+cb('en','English names')+cb('dates','Dates & ages')+cb('hebd','Hebrew birth dates')+cb('counts','Children & grandchildren')+cb('yz','Yahrzeits')+'</div>';
-      h+='<div class="row"><span class="flab">Quality</span>'+cb('hq','High quality — sharper, for a print shop (bigger file)')+'</div></div>';
-    }
-    h+='<div class="row"><button class="btn sm primary" data-act="pdf">Preview '+what+'</button><button class="btn sm ghost" data-act="pdf-menu">Close</button></div></section>';
-    return h;
+/* ---------- Print / PDF: its own window, with every kind of export whichever tab it's opened from ---------- */
+var PRINT_TABS=[['tree','Family tree'],['calendar','Calendar'],['upcoming','Upcoming dates'],['people','Family directory']];
+function printDialog(){
+  var cur=PRINT_TABS.some(function(x){return x[0]===ui.printTab;})?ui.printTab:'tree';
+  var h='<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="prt-t"><div class="dlg-box"><div class="dlg-head"><h2 id="prt-t">Print / PDF</h2><button class="btn sm ghost" data-act="pdf-menu" aria-label="Close">Close ✕</button></div>';
+  h+='<div class="dlg-main"><nav class="dlg-nav" role="tablist" aria-label="What to print">';
+  PRINT_TABS.forEach(function(t){h+='<button role="tab" data-act="print-tab" data-t="'+t[0]+'" aria-selected="'+(t[0]===cur)+'">'+t[1]+'</button>';});
+  return h+'</nav><div class="dlg-pane" role="tabpanel">'+printPane(cur)+'</div></div></div></div>';
+}
+function orientRow(){var por=ui.orient==='portrait';return '<div class="row"><span class="flab">Page</span><div class="seg" role="group" aria-label="Page orientation"><button data-act="orient" data-o="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="orient" data-o="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';}
+function goBtn(kind,label,primary){return '<button class="btn sm'+(primary===false?'':' primary')+'" data-act="pdf" data-kind="'+kind+'"'+(exporting?' disabled':'')+'>'+(exporting?'Preparing…':label)+'</button>';}
+function printPane(t){
+  var h='',heb=ui.calMode==='heb';
+  var hebSeg='<div class="seg" role="group" aria-label="Calendar"><button data-act="calmode" data-m="greg" aria-pressed="'+!heb+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+heb+'">Hebrew</button></div>';
+  if(t==='tree'){
+    var o=tpdf(),cb=function(k,label){return '<label class="check"><input type="checkbox" data-tpdf="'+k+'"'+(o[k]?' checked':'')+'>'+label+'</label>';};
+    var roots=treeRoots(),root=currentRoot(),inList=false;
+    h='<h3>Family tree</h3><p class="lead">The tree as on the Family tree tab — change what it shows here or there.</p>';
+    h+='<div class="sec tpo"><b>What to print</b><div class="row"><label class="flab" for="p-root">Start from</label><select class="sel" id="p-root" data-act-change="tree-root" style="max-width:100%">';
+    roots.forEach(function(p){var on=p.id===root||spousesOf(p.id).some(function(s){return s.pid===root;});if(on) inList=true;h+='<option value="'+esc(p.id)+'"'+(on?' selected':'')+'>'+esc(coupleLabel(p))+'</option>';});
+    if(!inList&&P(root)) h+='<option value="'+esc(root)+'" selected>'+esc(coupleLabel(P(root)))+'</option>';
+    h+='</select></div><div class="row"><label class="flab" for="p-layout">Layout</label><select class="sel" id="p-layout" data-act-change="tree-layout">';
+    TREE_LAYOUTS.forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.treeLayout===x[0]?' selected':'')+'>'+x[1]+'</option>';});
+    h+='</select><label class="flab" for="p-style">Style</label><select class="sel" id="p-style" data-act-change="tree-style">';
+    TREE_STYLES.forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.treeStyle===x[0]?' selected':'')+'>'+x[1]+'</option>';});
+    h+='</select></div><div class="row"><span class="flab">Direction</span>'+hebSeg+'</div></div>';
+    h+='<div class="sec tpo"><b>Paper</b>'+orientRow()+'<div class="row"><label class="flab" for="tp-paper">Size</label><select class="sel" id="tp-paper" data-tpdf="paper">';
+    Object.keys(PAPERS).forEach(function(k){h+='<option value="'+k+'"'+(o.paper===k?' selected':'')+'>'+PAPERS[k][2]+'</option>';});
+    h+='</select></div><div class="row"><label class="flab" for="tp-split">Pages</label><select class="sel" id="tp-split" data-tpdf="split"><option value="0">Whole tree on one page</option>';
+    [2,3,4,5].forEach(function(n){h+='<option value="'+n+'"'+(o.split===n?' selected':'')+'>Split over pages, '+n+' across (tape together)</option>';});
+    h+='</select></div><div class="row"><span class="flab">Quality</span>'+cb('hq','High quality — sharper, for a print shop (bigger file)')+'</div></div>';
+    h+='<div class="sec tpo"><b>Heading</b><div class="row"><label class="flab" for="tp-title">Title</label><input class="inp" id="tp-title" data-tpdf="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div><div class="row"><span class="flab">Show</span>'+cb('date','Printed date')+cb('foot','Page footer')+cb('legend','Legend of the lines')+'</div></div>';
+    h+='<div class="sec tpo"><b>On the cards</b><div class="row">'+cb('en','English names')+cb('dates','Dates & ages')+cb('hebd','Hebrew birth dates')+cb('counts','Children & grandchildren')+cb('yz','Yahrzeits')+'</div></div>';
+    return h+'<div class="row">'+goBtn('tree','Preview the family tree')+'</div>';
   }
-  h+='<p style="margin-top:12px"><b>Wall calendar</b> — all of '+esc(yt.t)+' on one large sheet. Every day has its own box with that day’s names written inside it. Made for a plotter or print shop.</p>';
-  h+='<div class="row"><label class="check" for="wall-size">Sheet size</label><select class="sel" id="wall-size">';
-  Object.keys(WALL_SIZES).forEach(function(k){h+='<option value="'+k+'"'+(k===cur?' selected':'')+'>'+WALL_SIZES[k][2]+'</option>';});
-  h+='</select><button class="btn sm primary" data-act="pdf" data-kind="wall">Preview wall calendar</button></div>';
-  h+='<p style="margin-top:14px"><b>Letter-size pages</b> — for a home printer.</p>';
-  h+='<div class="row"><button class="btn sm" data-act="pdf" data-kind="month">'+esc(mt.t)+' · one page, names in each day</button><button class="btn sm" data-act="pdf" data-kind="year">'+esc(yt.t)+' · small months with names listed below</button><button class="btn sm ghost" data-act="pdf-menu">Close</button></div>';
-  h+='<p class="note">Each export opens a preview first. Exports follow the English / Hebrew switch and the filters on this page.</p></section>';
-  return h;
+  if(t==='calendar'){
+    var mt=monthTitle(),yt=yearTitle(),cw=lsGet('fl-wall','24x36');
+    h='<h3>Calendar</h3><p class="lead">Uses the dates chosen here and on the Calendar tab.</p>';
+    h+='<div class="sec"><b>What to include</b><div class="row"><span class="flab">Calendar</span>'+hebSeg+'</div>'+filtersHTML()+whoHTML('p-who')+orientRow()+'</div>';
+    h+='<div class="sec"><b>One month</b><p>One page, with the names written in each day.</p><div class="row"><button class="btn sm ghost" data-act="p-month" data-d="-1" aria-label="Previous month">‹</button><b>'+esc(mt.t)+'</b><button class="btn sm ghost" data-act="p-month" data-d="1" aria-label="Next month">›</button>'+goBtn('month','Preview this month')+'</div></div>';
+    h+='<div class="sec"><b>A whole year</b><p>Small months, with every name listed below.</p><div class="row"><button class="btn sm ghost" data-act="p-year" data-d="-1" aria-label="Previous year">‹</button><b>'+esc(yt.t)+'</b><button class="btn sm ghost" data-act="p-year" data-d="1" aria-label="Next year">›</button>'+goBtn('year','Preview this year')+'</div></div>';
+    h+='<div class="sec"><b>Wall calendar</b><p>All of '+esc(yt.t)+' on one large sheet — every day has its own box with that day’s names inside it. Made for a plotter or print shop.</p><div class="row"><label class="flab" for="wall-size">Sheet size</label><select class="sel" id="wall-size">';
+    Object.keys(WALL_SIZES).forEach(function(k){h+='<option value="'+k+'"'+(k===cw?' selected':'')+'>'+WALL_SIZES[k][2]+'</option>';});
+    return h+'</select>'+goBtn('wall','Preview wall calendar')+'</div></div>';
+  }
+  if(t==='upcoming'){
+    h='<h3>Upcoming dates</h3><p class="lead">A list of the coming birthdays, anniversaries and yahrzeits.</p>';
+    h+='<div class="sec"><b>What to include</b><div class="row"><label class="flab" for="p-horizon">How far ahead</label><select class="sel" id="p-horizon" data-act-change="p-horizon">';
+    [[30,'The next 30 days'],[90,'The next 90 days'],[180,'The next 6 months'],[365,'The next year']].forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.horizon===x[0]?' selected':'')+'>'+x[1]+'</option>';});
+    if([30,90,180,365].indexOf(ui.horizon)<0) h+='<option value="'+ui.horizon+'" selected>The next '+ui.horizon+' days</option>';
+    return h+'</select></div>'+filtersHTML()+orientRow()+'</div><div class="row">'+goBtn('upcoming','Preview upcoming dates')+'</div>';
+  }
+  h='<h3>Family directory</h3><p class="lead">Everyone in the family, by last name: Hebrew and English names, birth dates, ages, husband or wife, children and grandchildren.</p>';
+  return h+'<div class="sec"><b>Paper</b>'+orientRow()+'</div><div class="row">'+goBtn('people','Preview the family directory')+'</div>';
 }
 var HEB=/[֐-׿]/,STRONG=/[A-Za-zÀ-ɏ֐-׿]/;
 function rgb(h){h=h.replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
@@ -2674,7 +2699,7 @@ function makeWall(size){
 function exportPDF(opts){
   if(exporting) return;
   exporting=true;render();
-  makePdf(opts).then(function(out){ui.pdfPrev=out;ui.pdfMenu=false;},function(){toast('Couldn’t create the PDF. Try again.');}).then(function(){exporting=false;render();});
+  makePdf(opts).then(function(out){ui.pdfPrev=out;},function(){toast('Couldn’t create the PDF. Try again.');}).then(function(){exporting=false;render();});
 }
 function pdfPrevHTML(){
   var o=ui.pdfPrev,h='<div class="pvw" role="dialog" aria-modal="true" aria-label="PDF preview"><div class="pvw-box"><div class="pvw-head"><div><b>Preview</b><span class="note">'+esc(o.name)+' · '+o.pages+(o.pages===1?' page':' pages')+'</span></div>';
@@ -2691,7 +2716,7 @@ function pdfPrevHTML(){
 function closePrev(){if(ui.pdfPrev&&ui.pdfPrev.url) URL.revokeObjectURL(ui.pdfPrev.url);ui.pdfPrev=null;}
 function savePrev(){
   var out=ui.pdfPrev;if(!out) return;
-  saveFile(out.name,out.blob,'application/pdf').then(function(){toast('PDF saved.');closePrev();render();}).catch(function(e){
+  saveFile(out.name,out.blob,'application/pdf').then(function(){toast('PDF saved.');closePrev();ui.pdfMenu=false;render();}).catch(function(e){
     var c=e&&e.code;
     if(c==='declined') toast('Export cancelled.');
     else if(c==='rate_limited') toast('A save prompt is already open.');
@@ -2803,6 +2828,7 @@ function webSave(){
   api('data'+tq(),'PUT',{rev:web.rev,data:data}).then(function(r){
     web.rev=r.rev;saving=false;saved=JSON.parse(JSON.stringify(data));dirty=false;
     var ct=curTree();if(ct&&data.meta.familyName) ct.name=data.meta.familyName;
+    if(ownerTrees) ownerTrees.forEach(function(t){if(t.id===web.tree&&data.meta.familyName) t.name=data.meta.familyName;});
     try{sessionStorage.removeItem(PKEY);}catch(e){}
     renderAll();toast('Saved. Everyone sees it right away.');
   },function(e){
@@ -2843,7 +2869,7 @@ function ownerTreesHTML(){
   var h='<p class="lead">As the site owner you can open every family tree here. Switch between them with the menu at the top of the page.</p>';
   if(ownerTrees){
     h+='<div class="acct-list">';
-    ownerTrees.forEach(function(t){h+='<div class="acct"><div class="acct-who"><b>'+esc(t.name)+'</b><span class="note">'+t.people+(t.people===1?' person':' people')+' can open it</span>'+(t.id===web.tree?'<span class="note">· open now</span>':'')+'</div>'+(t.id!==web.tree?'<div class="acct-do"><button class="btn sm" data-act="tree-open" data-id="'+esc(t.id)+'">Open</button></div>':'')+'</div>';});
+    ownerTrees.forEach(function(t){var nm=t.id===web.tree?data.meta.familyName||t.name:t.name;h+='<div class="acct"><div class="acct-who"><b>'+esc(nm)+'</b>'+(t.id===web.tree&&dirty&&nm!==t.name?'<span class="note">(new name not saved yet)</span>':'')+'<span class="note">'+t.people+(t.people===1?' person':' people')+' can open it</span>'+(t.id===web.tree?'<span class="note">· open now</span>':'')+'</div>'+(t.id!==web.tree?'<div class="acct-do"><button class="btn sm" data-act="tree-open" data-id="'+esc(t.id)+'">Open</button></div>':'')+'</div>';});
     h+='</div>';
   } else h+='<p class="note">Loading…</p>';
   h+='<h4 class="subh">Start a new family tree</h4><div class="row acct-add"><input class="inp" id="nt-name" placeholder="New family name" autocomplete="off"><button class="btn sm primary" data-act="tree-new"'+(web.busy?' disabled':'')+'>Start a new family tree</button></div>';
@@ -3046,7 +3072,7 @@ document.addEventListener('click',function(e){
     case 'horizon':ui.horizon=ui.horizon>=365?ui.horizon+365:Math.min(ui.horizon+90,365);render();break;
     case 'pdf':
       var ws=$('#wall-size');if(ws) lsSet('fl-wall',ws.value);
-      ui.pdfMenu=false;exportPDF({kind:t.dataset.kind,size:ws?ws.value:lsGet('fl-wall','24x36')});break;
+      exportPDF({kind:t.dataset.kind,size:ws?ws.value:lsGet('fl-wall','24x36')});break;
     case 'sign-out':signOut();break;
     case 'reload':location.reload();break;
     case 'setup-open':web.state='setup';web.err='';render();break;
@@ -3072,7 +3098,10 @@ document.addEventListener('click',function(e){
       try{navigator.clipboard.writeText(url).then(function(){toast('Address copied.');},function(){toast('Select the address and copy it.');});}catch(err){toast('Select the address and copy it.');}
       break;
     case 'orient':ui.orient=t.dataset.o;lsSet('fl-orient',ui.orient);render();break;
-    case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;render();break;
+    case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;if(ui.pdfMenu) ui.printTab={calendar:'calendar',upcoming:'upcoming',people:'people'}[ui.view]||'tree';render();break;
+    case 'print-tab':ui.printTab=t.dataset.t;render();break;
+    case 'p-month':var dm=+t.dataset.d;if(ui.calMode==='heb') ui.hCur=dm>0?hNext(ui.hCur):hPrev(ui.hCur);else{var gm=ui.gCur.m+dm;ui.gCur={y:ui.gCur.y+(gm>12?1:gm<1?-1:0),m:gm>12?1:gm<1?12:gm};}render();break;
+    case 'p-year':var dy=+t.dataset.d;if(ui.calMode==='heb') ui.hCur={y:ui.hCur.y+dy,m:ui.hCur.m===13&&!H.leap(ui.hCur.y+dy)?12:ui.hCur.m};else ui.gCur={y:ui.gCur.y+dy,m:ui.gCur.m};render();break;
     case 'pdf-save':savePrev();break;
     case 'pdf-back':closePrev();ui.pdfMenu=true;render();break;
     case 'pdf-close':closePrev();render();break;
@@ -3186,6 +3215,8 @@ document.addEventListener('click',function(e){
   }
 });
 document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'&&!drawer&&ui.pdfPrev){closePrev();render();return;}
+  if(e.key==='Escape'&&!drawer&&ui.pdfMenu){ui.pdfMenu=false;render();return;}
   if(e.key==='Escape'&&!drawer&&ui.panel){ui.panel=null;render();return;}
   if(e.key==='Escape'&&drawer){if(drawer.mode==='edit'&&drawer.draft.id){drawer={mode:'view',pid:drawer.draft.id};renderDrawer();}else closeDrawer();}
   if((e.key==='Enter'||e.key===' ')&&e.target.matches&&e.target.matches('li[data-act]')){e.preventDefault();e.target.click();}
@@ -3212,6 +3243,7 @@ document.addEventListener('change',function(e){
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;setCalWho(t.value);ui.zoomFit=true;render();}
   if(a==='cal-who'){setCalWho(t.value);render();}
+  if(a==='p-horizon'){ui.horizon=+t.value||90;render();}
   if(a==='tree-switch'){switchTree(t.value);return;}
   if(a==='acct-branch'){acctBranch(+t.dataset.i,t.value);return;}
   if(a==='tree-style'){ui.treeStyle=t.value;lsSet('fl-tstyle',t.value);ui.zoomFit=true;render();}
