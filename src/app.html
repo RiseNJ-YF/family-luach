@@ -391,6 +391,15 @@ textarea.inp{min-height:70px;resize:vertical}
 .role.owner{border-color:var(--c-anniversary);color:var(--c-anniversary)}
 .invite-link{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:4px 8px}
 .panel h4.subh{margin:18px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
+.pvw{position:fixed;inset:0;background:var(--scrim);z-index:55;display:flex;align-items:center;justify-content:center;padding:16px}
+.pvw-box{background:var(--surface);border-radius:14px;box-shadow:var(--shadow);width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden}
+.pvw-head{display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+.pvw-head .note{margin-inline-start:8px}.pvw-btns{display:flex;gap:8px;flex-wrap:wrap}
+.pvw-body{overflow:auto;padding:16px;background:var(--surface-2);display:flex;flex-direction:column;align-items:center;gap:14px;min-height:200px}
+.pvw-pg{max-width:100%;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18)}
+.pvw-grid{display:grid;gap:6px;width:100%}.pvw-grid img{width:100%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.18)}
+.pvw-frame{width:100%;height:72vh;border:0;background:#fff}
+.tpo .row{align-items:center}.tpo .flab{min-width:88px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(16px + env(safe-area-inset-top,0px));z-index:60;background:var(--surface);color:var(--ink);border:1px solid var(--line-2);border-radius:10px;padding:10px 16px;box-shadow:var(--shadow);font-weight:600;font-size:14px;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){
   .drawer{animation:slidein .22s ease-out}
@@ -766,6 +775,7 @@ function render(){
   if(data.people.length) h+='<button class="btn sm" data-act="pdf-menu" title="Save what’s on this tab as a PDF"'+(exporting?' disabled':'')+' aria-expanded="'+!!ui.pdfMenu+'">'+(exporting?'Preparing PDF…':'Export PDF ▾')+'</button>';
   h+='</div>';
   if(ui.pdfMenu&&!exporting) h+=pdfMenuHTML();
+  if(ui.pdfPrev) h+=pdfPrevHTML();
   if(editable()&&ui.panel==='share') h+=sharePanel();
   if(editable()&&ui.panel==='settings') h+=settingsPanel();
   if(editable()&&data.meta.example&&!ui.panel) h+='<div class="banner"><span><b>This is an example family</b> so you can see how everything works. Replace it with your own when you’re ready.</span><button class="btn sm" data-act="panel" data-p="settings">Start my own family</button></div>';
@@ -1055,21 +1065,23 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
   var par=p.parents.filter(function(x){return P(x);});
   var h='<div class="tcell">';
   if(par.length&&!isRoot&&!par.some(function(x){return placed[x];})) h+='<button class="upbtn" data-act="root" data-pid="'+esc(par[0])+'" title="Show this side of the family">↑ '+(p.hebFirst?'<bdi dir="rtl" lang="he">'+esc(p.hebFirst)+'</bdi> — family':esc(p.first||'Their')+'’s family')+'</button>';
+  var po=pdf&&PDFOPT?PDFOPT:null;
   var gsp=ghost?spousesOf(p.id).map(function(s){var q=P(s.pid);return q.hebFirst||q.first||'';}).filter(Boolean):[];
   h+='<button class="tcard fk'+flowerKind(p.id)+(p.gender?' '+p.gender:'')+(p.deceased?' dec':'')+(isRoot?' root':'')+(ghost?' ghost':'')+'" data-act="'+(ghost?'goto':'open')+'" data-pid="'+esc(p.id)+'" title="'+esc(ghost?'Also shown next to '+(gsp.join(' & ')||'their husband or wife')+' — tap to go there':primaryText(p)+(hn?' — '+fullName(p):''))+'">';
   if(hn){
     h+='<span class="tn he'+(hn.length>40?' xlong':hn.length>24?' long':'')+'" dir="rtl" lang="he">'+hebPartsHTML(p)+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
-    h+='<span class="tl">'+esc(fullName(p))+'</span>';
+    if(!po||po.en) h+='<span class="tl">'+esc(fullName(p))+'</span>';
   } else {
     h+='<span class="tn">'+esc(p.first||'Unnamed')+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     if(p.last||p.maiden) h+='<span class="tl">'+esc([p.last,p.maiden?'('+p.maiden+')':''].filter(Boolean).join(' '))+'</span>';
   }
-  if(dates) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
-  if(p.deceased&&d) h+='<span class="tyz"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
+  if(po&&po.hebd&&!p.deceased&&b&&!p.birthNoYear) h+='<span class="th"><bdi dir="rtl" lang="he">'+esc(fmtHe(hebOf(p.birth,p.birthSunset)))+'</bdi></span>';
+  if(dates&&(!po||po.dates)) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
+  if(p.deceased&&d&&(!po||po.yz)) h+='<span class="tyz"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
   if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
   /* grandchildren and every generation below them (great-grandchildren and so on) */
   var gd=grandTotal(gc);
-  if(k) h+='<span class="tk">'+k+(k===1?' child':' children')+(gd?' · '+gd+' grand':'')+'</span>';
+  if(k&&(!po||po.counts)) h+='<span class="tk">'+k+(k===1?' child':' children')+(gd?' · '+gd+' grand':'')+'</span>';
   if(note){
     var pn=p.parents.map(function(q){q=P(q);return q?(q.hebFirst||q.first||''):'';}).filter(Boolean).map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ');
     h+='<span class="tk tlink" data-act="'+note.act+'" data-pid="'+esc(p.id)+'"'+(note.k?' data-k="'+esc(note.k)+'"':'')+' title="'+(note.act==='goto-copy'?'Go to the copy under their parents':'Show their parents’ family')+'">↩ '+(p.gender==='f'?'daughter':p.gender==='m'?'son':'child')+' of '+pn+(note.act==='open-branch'?' · show':'')+'</span>';
@@ -2148,6 +2160,19 @@ function renderDrawer(){
 /* ---------- PDF export ---------- */
 var KHEX={birthday:'#23578C',hbirthday:'#6A4899',anniversary:'#A2741A',yahrzeit:'#515B67',other:'#9B4459',holiday:'#3D7853'};
 var KTINT={birthday:'#D9E4F0',hbirthday:'#E5DCF0',anniversary:'#F2E6CB',yahrzeit:'#DFE3E7',other:'#F2DCE2',holiday:'#D9EDE0'};
+/* ---------- Tree PDF options (kept on this device) ---------- */
+var PAPERS={letter:[8.5,11,'Letter 8½ × 11 in'],legal:[8.5,14,'Legal 8½ × 14 in'],tabloid:[11,17,'Tabloid 11 × 17 in'],a4:[8.27,11.69,'A4'],a3:[11.69,16.54,'A3'],p18:[18,24,'Poster 18 × 24 in'],p24:[24,36,'Poster 24 × 36 in'],p36:[36,48,'Poster 36 × 48 in']};
+var TPDF_DEF={paper:'letter',split:0,title:'',date:true,foot:true,en:true,dates:true,hebd:false,counts:true,yz:true,legend:false,hq:false};
+/* while a tree PDF is being drawn: which details the cards show */
+var PDFOPT=null;
+function tpdf(){if(!ui.tpdf) ui.tpdf=Object.assign({},TPDF_DEF,lsGet('fl-tpdf',null)||{});if(!PAPERS[ui.tpdf.paper]) ui.tpdf.paper='letter';return ui.tpdf;}
+/* A key to the lines, printed under the tree. */
+function treeLegendHTML(){
+  var L=function(dash,col,w,label){return '<span class="px-lg"><svg width="36" height="10"><line x1="1" y1="5" x2="35" y2="5" stroke="'+col+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/></svg>'+label+'</span>';};
+  return '<div class="px-legend2">'+L('','#A2741A',2,'1st marriage')+L('6 4','#A2741A',2,'2nd marriage')+L('1.5 3','#A2741A',2,'3rd marriage')
+    +'<span class="px-lg"><svg width="36" height="10"><line x1="1" y1="3" x2="35" y2="3" stroke="#A2741A" stroke-width="1.4"/><line x1="1" y1="7" x2="35" y2="7" stroke="#A2741A" stroke-width="1.4"/></svg>4th marriage</span>'
+    +L('','#77818D',2,'Divorced')+L('','#9AA396',1.5,'To the children')+L('6 5','#8C7AB5',2,'Married a relative: links her two cards')+'<span class="px-lg"><b>ז״ל</b>&nbsp;passed away</span></div>';
+}
 var PX_CSS='.px{--bg:#F1F3EF;--surface:#FFFFFF;--surface-2:#E7EBE5;--ink:#19222D;--ink-2:#46515E;--ink-3:#77818D;--line:#D3D9D0;--line-2:#BCC4B9;--accent:#23578C;--c-birthday:#23578C;--c-other:#9B4459;--c-anniversary:#A2741A;color:#19222D;font-family:"Assistant","Segoe UI",sans-serif;font-size:13px;line-height:1.35}'+
 '.px .upbtn{display:none}.px .tcard{box-shadow:none}'+
 '.px-page{background:#FFFFFF;padding:34px 40px 24px;display:flex;flex-direction:column;box-sizing:border-box}'+
@@ -2158,6 +2183,7 @@ var PX_CSS='.px{--bg:#F1F3EF;--surface:#FFFFFF;--surface-2:#E7EBE5;--ink:#19222D
 '.px-date{font-size:11px;color:#77818D;text-align:right}'+
 '.px-body{flex:1;min-height:0;overflow:hidden}'+
 '.px-fitbody{padding:6px 0 10px}'+
+'.px-legend2{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:11px;color:#46515E;margin-top:14px;padding-top:8px;border-top:1px solid #E7EBE5;justify-content:center}.px-lg{display:inline-flex;align-items:center;gap:6px}'+
 '.px-foot{font-size:10px;color:#77818D;display:flex;justify-content:space-between;border-top:1px solid #D3D9D0;padding-top:6px;margin-top:8px}'+
 '.px-mh{font-family:"Frank Ruhl Libre",Georgia,serif;font-size:17px;margin-top:10px;padding-bottom:3px;border-bottom:1px solid #D3D9D0;display:flex;justify-content:space-between;align-items:baseline}'+
 '.px-mh span{font-size:13px;color:#77818D}'+
@@ -2285,47 +2311,78 @@ function makePdf(opts){
   if(opts.kind==='wall') return makeWall(opts.size);
   var stage=null,sy=window.scrollY||0;
   return loadLibs().then(function(){return document.fonts&&document.fonts.ready?document.fonts.ready:null;}).then(function(){
-    var spec=exportSpec(opts.kind);
-    var W=spec.orient==='landscape'?1056:816,Hh=spec.orient==='landscape'?816:1056;
+    /* the tree has its own options (paper, pages, title, what the cards show …) */
+    var o=ui.view==='tree'&&!opts.kind?tpdf():null,spec;
+    PDFOPT=o;try{spec=exportSpec(opts.kind);}finally{PDFOPT=null;}
+    var land=spec.orient==='landscape',paper=o?PAPERS[o.paper]:PAPERS.letter,pin=land?[paper[1],paper[0]]:[paper[0],paper[1]];
+    /* pages are laid out at 96 px per inch; a tree page starts letter-wide and is then fitted to the paper */
+    var W=spec.fit?(land?1056:816):Math.round(pin[0]*96),Hh=Math.round(pin[1]*96);
     stage=document.createElement('div');stage.className='px';stage.setAttribute('aria-hidden','true');
     stage.style.cssText='position:absolute;left:-30000px;top:0;';
     stage.innerHTML='<style>'+PX_CSS+'</style>';
     document.body.appendChild(stage);
-    var head='<div class="px-head"><div><div class="px-fam">'+esc(data.meta.familyName)+'</div><div class="px-title">'+esc(spec.title)+'</div></div><div class="px-date">'+esc(spec.printed)+'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(H.fromAbs(TODAY)))+'</span></div></div>';
-    var foot='<div class="px-foot"><span>Family Luach</span><span class="px-pn"></span></div>';
+    var title=o&&o.title.trim()?o.title.trim():data.meta.familyName,showDate=!o||o.date,showFoot=!o||o.foot;
+    var head='<div class="px-head"><div><div class="px-fam" dir="auto">'+esc(title)+'</div><div class="px-title">'+esc(spec.title)+'</div></div>'+(showDate?'<div class="px-date">'+esc(spec.printed)+'<br><span class="he" dir="rtl" lang="he">'+esc(fmtHe(H.fromAbs(TODAY)))+'</span></div>':'')+'</div>';
+    var split=o&&spec.fit&&o.split>1?o.split:0;
+    var foot=showFoot&&!split?'<div class="px-foot"><span>Family Luach</span><span class="px-pn"></span></div>':'';
+    var legend=o&&o.legend?treeLegendHTML():'';
     var pages=[];
     function toEl(html){var t=document.createElement('div');t.innerHTML=html;return t.children.length===1?t.firstElementChild:t;}
     if(spec.fit){
       var pg=document.createElement('div');pg.className='px-page fit';pg.style.minWidth=W+'px';
-      pg.innerHTML=head+'<div class="px-fitbody">'+spec.body+'</div>'+foot;stage.appendChild(pg);pages.push(pg);
+      pg.innerHTML=head+'<div class="px-fitbody">'+spec.body+legend+'</div>'+foot;stage.appendChild(pg);pages.push(pg);
     } else {
       var newPage=function(){var pg=document.createElement('div');pg.className='px-page';pg.style.width=W+'px';pg.style.height=Hh+'px';pg.innerHTML=head+'<div class="px-body">'+spec.pageHead+'</div>'+foot;stage.appendChild(pg);pages.push(pg);return pg.querySelector('.px-body');};
+      var blocks=legend?spec.blocks.concat([{html:legend}]):spec.blocks;
       var body=newPage(),base=body.children.length;
-      spec.blocks.forEach(function(b,i){
+      blocks.forEach(function(b,i){
         var node=toEl(b.html);body.appendChild(node);
         var probe=null;
-        if(b.keepNext&&spec.blocks[i+1]){probe=toEl(spec.blocks[i+1].html);body.appendChild(probe);}
+        if(b.keepNext&&blocks[i+1]){probe=toEl(blocks[i+1].html);body.appendChild(probe);}
         var over=body.scrollHeight>body.clientHeight+1;
         if(probe) body.removeChild(probe);
         if(over&&body.children.length>base+1){body.removeChild(node);body=newPage();body.appendChild(node);}
-        if(b.breakAfter&&i<spec.blocks.length-1) body=newPage();
+        if(b.breakAfter&&i<blocks.length-1) body=newPage();
       });
     }
     pages.forEach(function(pg,i){var pn=pg.querySelector('.px-pn');if(pn) pn.textContent='Page '+(i+1)+' of '+pages.length;});
     window.scrollTo(0,0);
-    var pdf=new window.jspdf.jsPDF({orientation:spec.orient,unit:'pt',format:'letter'});
-    var pw=pdf.internal.pageSize.getWidth(),ph=pdf.internal.pageSize.getHeight();
-    var chain=Promise.resolve();
-    pages.forEach(function(pg,j){
-      chain=chain.then(function(){return window.html2canvas(pg,{scale:2,backgroundColor:'#ffffff',logging:false,useCORS:true});}).then(function(cv){
-        if(j>0) pdf.addPage();
-        var r=Math.min(pw/cv.width,ph/cv.height),w=cv.width*r,hh=cv.height*r;
-        pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',(pw-w)/2,spec.fit?Math.max(0,(ph-hh)/2):0,w,hh);
+    var pw=pin[0]*72,ph=pin[1]*72;
+    var pdf=new window.jspdf.jsPDF({orientation:land?'landscape':'portrait',unit:'pt',format:[pw,ph]});
+    pw=pdf.internal.pageSize.getWidth();ph=pdf.internal.pageSize.getHeight();
+    /* sharpness: about 150 dots per inch on paper (300 in high quality), within what a browser can draw */
+    var dpi=o&&o.hq?300:150;
+    function scaleFor(pg,inchesWide){var w=pg.offsetWidth,h=pg.offsetHeight,sc=Math.max(2,inchesWide*dpi/w);return Math.min(sc,15000/Math.max(w,h),Math.sqrt(180e6/(w*h)));}
+    function thumb(cv){var k=Math.min(1,1400/cv.width),t=document.createElement('canvas');t.width=Math.max(1,Math.round(cv.width*k));t.height=Math.max(1,Math.round(cv.height*k));t.getContext('2d').drawImage(cv,0,0,t.width,t.height);return t.toDataURL('image/jpeg',.85);}
+    var q=o&&o.hq?0.95:0.92,previews=[],count=0,chain=Promise.resolve();
+    if(split){
+      /* one big picture, cut into tiles: 'split' pages across, as many rows as it takes */
+      var m=0.35*72,tw=pw-2*m,th=ph-2*m;
+      chain=window.html2canvas(pages[0],{scale:scaleFor(pages[0],split*tw/72),backgroundColor:'#ffffff',logging:false,useCORS:true}).then(function(cv){
+        var ptPx=split*tw/cv.width,tpw=cv.width/split,tph=th/ptPx,rows=Math.ceil(cv.height/tph-0.01);
+        for(var r=0;r<rows;r++) for(var c=0;c<split;c++){
+          var hpx=Math.min(tph,cv.height-r*tph),t=document.createElement('canvas');t.width=Math.round(tpw);t.height=Math.round(tph);
+          var g=t.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,t.width,t.height);g.drawImage(cv,c*tpw,r*tph,tpw,hpx,0,0,tpw,hpx);
+          if(count) pdf.addPage([pw,ph],land?'landscape':'portrait');
+          pdf.addImage(t.toDataURL('image/jpeg',q),'JPEG',m,m,tw,th);
+          pdf.setDrawColor(210);pdf.setLineWidth(.5);pdf.rect(m,m,tw,th);
+          pdf.setFontSize(7);pdf.setTextColor(150);pdf.text('Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+' — trim along the grey line and tape the pages together',m,ph-m/2);
+          previews.push(thumb(t));count++;
+        }
       });
-    });
+    } else {
+      pages.forEach(function(pg,j){
+        chain=chain.then(function(){return window.html2canvas(pg,{scale:spec.fit&&o?scaleFor(pg,pin[0]):2,backgroundColor:'#ffffff',logging:false,useCORS:true});}).then(function(cv){
+          if(j>0) pdf.addPage([pw,ph],land?'landscape':'portrait');
+          var r=Math.min(pw/cv.width,ph/cv.height),w=cv.width*r,hh=cv.height*r;
+          pdf.addImage(cv.toDataURL('image/jpeg',q),'JPEG',(pw-w)/2,spec.fit?Math.max(0,(ph-hh)/2):0,w,hh);
+          previews.push(thumb(cv));count++;
+        });
+      });
+    }
     return chain.then(function(){
-      var name=(data.meta.familyName+' - '+spec.file).replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
-      return {blob:pdf.output('blob'),name:name,pages:pages.length};
+      var name=(data.meta.familyName+' - '+spec.file+(o&&o.paper!=='letter'?' ('+PAPERS[o.paper][2].replace(/ in$/,'')+')':'')).replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
+      return {blob:pdf.output('blob'),name:name,pages:count,previews:previews,cols:split||1};
     });
   }).then(function(r){if(stage) stage.remove();window.scrollTo(0,sy);return r;},function(err){if(stage) stage.remove();window.scrollTo(0,sy);throw err;});
 }
@@ -2340,16 +2397,28 @@ function pdfMenuHTML(){
   h+='<div class="row" style="margin-top:4px"><span class="flab">Page orientation</span><div class="seg" role="group" aria-label="Page orientation"><button data-act="orient" data-o="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="orient" data-o="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';
   if(ui.view!=='calendar'){
     var what={upcoming:'the upcoming dates',tree:'the family tree',people:'the family directory'}[ui.view]||'this tab';
-    h+='<div class="row"><button class="btn sm primary" data-act="pdf">Export '+what+'</button><button class="btn sm ghost" data-act="pdf-menu">Close</button></div></section>';
+    if(ui.view==='tree'){
+      var o=tpdf(),cb=function(k,label){return '<label class="check"><input type="checkbox" data-tpdf="'+k+'"'+(o[k]?' checked':'')+'>'+label+'</label>';};
+      h+='<div class="tpo"><div class="row"><label class="flab" for="tp-paper">Paper</label><select class="sel" id="tp-paper" data-tpdf="paper">';
+      Object.keys(PAPERS).forEach(function(k){h+='<option value="'+k+'"'+(o.paper===k?' selected':'')+'>'+PAPERS[k][2]+'</option>';});
+      h+='</select><select class="sel" id="tp-split" data-tpdf="split" aria-label="Pages"><option value="0">Whole tree on one page</option>';
+      [2,3,4,5].forEach(function(n){h+='<option value="'+n+'"'+(o.split===n?' selected':'')+'>Split over pages, '+n+' across (tape together)</option>';});
+      h+='</select></div>';
+      h+='<div class="row"><label class="flab" for="tp-title">Title</label><input class="inp" id="tp-title" data-tpdf="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div>';
+      h+='<div class="row"><span class="flab">Page</span>'+cb('date','Printed date')+cb('foot','Page footer')+cb('legend','Legend of the lines')+'</div>';
+      h+='<div class="row"><span class="flab">On the cards</span>'+cb('en','English names')+cb('dates','Dates & ages')+cb('hebd','Hebrew birth dates')+cb('counts','Children & grandchildren')+cb('yz','Yahrzeits')+'</div>';
+      h+='<div class="row"><span class="flab">Quality</span>'+cb('hq','High quality — sharper, for a print shop (bigger file)')+'</div></div>';
+    }
+    h+='<div class="row"><button class="btn sm primary" data-act="pdf">Preview '+what+'</button><button class="btn sm ghost" data-act="pdf-menu">Close</button></div></section>';
     return h;
   }
   h+='<p style="margin-top:12px"><b>Wall calendar</b> — all of '+esc(yt.t)+' on one large sheet. Every day has its own box with that day’s names written inside it. Made for a plotter or print shop.</p>';
   h+='<div class="row"><label class="check" for="wall-size">Sheet size</label><select class="sel" id="wall-size">';
   Object.keys(WALL_SIZES).forEach(function(k){h+='<option value="'+k+'"'+(k===cur?' selected':'')+'>'+WALL_SIZES[k][2]+'</option>';});
-  h+='</select><button class="btn sm primary" data-act="pdf" data-kind="wall">Export wall calendar</button></div>';
+  h+='</select><button class="btn sm primary" data-act="pdf" data-kind="wall">Preview wall calendar</button></div>';
   h+='<p style="margin-top:14px"><b>Letter-size pages</b> — for a home printer.</p>';
   h+='<div class="row"><button class="btn sm" data-act="pdf" data-kind="month">'+esc(mt.t)+' · one page, names in each day</button><button class="btn sm" data-act="pdf" data-kind="year">'+esc(yt.t)+' · small months with names listed below</button><button class="btn sm ghost" data-act="pdf-menu">Close</button></div>';
-  h+='<p class="note">Exports follow the English / Hebrew switch and the filters on this page.</p></section>';
+  h+='<p class="note">Each export opens a preview first. Exports follow the English / Hebrew switch and the filters on this page.</p></section>';
   return h;
 }
 var HEB=/[֐-׿]/,STRONG=/[A-Za-zÀ-ɏ֐-׿]/;
@@ -2556,16 +2625,34 @@ function makeWall(size){
     return {blob:pdf.output('blob'),name:name,pages:1};
   });
 }
+/* Every export is made first and shown in a preview; it is only saved when you choose Save PDF. */
 function exportPDF(opts){
   if(exporting) return;
   exporting=true;render();
-  makePdf(opts).then(function(out){return saveFile(out.name,out.blob,'application/pdf');}).then(function(){toast('PDF saved.');}).catch(function(e){
+  makePdf(opts).then(function(out){ui.pdfPrev=out;ui.pdfMenu=false;},function(){toast('Couldn’t create the PDF. Try again.');}).then(function(){exporting=false;render();});
+}
+function pdfPrevHTML(){
+  var o=ui.pdfPrev,h='<div class="pvw" role="dialog" aria-modal="true" aria-label="PDF preview"><div class="pvw-box"><div class="pvw-head"><div><b>Preview</b><span class="note">'+esc(o.name)+' · '+o.pages+(o.pages===1?' page':' pages')+'</span></div>';
+  h+='<div class="pvw-btns"><button class="btn sm primary" data-act="pdf-save">Save PDF</button><button class="btn sm" data-act="pdf-back">Change options</button><button class="btn sm ghost" data-act="pdf-close">Close</button></div></div><div class="pvw-body">';
+  if(o.previews&&o.previews.length){
+    var im=o.previews.map(function(u,i){return '<img class="pvw-pg" src="'+u+'" alt="Page '+(i+1)+'">';}).join('');
+    h+=o.cols>1?'<p class="note">Print all '+o.pages+' pages and tape them together, '+o.cols+' across, as shown:</p><div class="pvw-grid" style="grid-template-columns:repeat('+o.cols+',1fr)">'+im+'</div>':im;
+  } else {
+    if(!o.url) o.url=URL.createObjectURL(o.blob);
+    h+='<iframe class="pvw-frame" src="'+o.url+'" title="PDF preview"></iframe>';
+  }
+  return h+'</div></div></div>';
+}
+function closePrev(){if(ui.pdfPrev&&ui.pdfPrev.url) URL.revokeObjectURL(ui.pdfPrev.url);ui.pdfPrev=null;}
+function savePrev(){
+  var out=ui.pdfPrev;if(!out) return;
+  saveFile(out.name,out.blob,'application/pdf').then(function(){toast('PDF saved.');closePrev();render();}).catch(function(e){
     var c=e&&e.code;
     if(c==='declined') toast('Export cancelled.');
     else if(c==='rate_limited') toast('A save prompt is already open.');
     else if(c==='unavailable'||c==='not_granted'||c==='capability_disabled'||c==='capability_removed') toast('PDF export isn’t available in this view.');
-    else toast('Couldn’t create the PDF. Try again.');
-  }).then(function(){exporting=false;render();});
+    else toast('Couldn’t save the PDF. Try again.');
+  });
 }
 window.flMakePdf=makePdf;
 
@@ -2942,6 +3029,9 @@ document.addEventListener('click',function(e){
       break;
     case 'orient':ui.orient=t.dataset.o;lsSet('fl-orient',ui.orient);render();break;
     case 'pdf-menu':ui.pdfMenu=!ui.pdfMenu;render();break;
+    case 'pdf-save':savePrev();break;
+    case 'pdf-back':closePrev();ui.pdfMenu=true;render();break;
+    case 'pdf-close':closePrev();render();break;
     case 'calmode':ui.calMode=t.dataset.m;lsSet('fl-cal',ui.calMode);gotoMonthOf(ui.sel);if(ui.view==='tree') ui.zoomFit=true;render();break;
     case 'calspan':ui.calSpan=t.dataset.s;lsSet('fl-calspan',ui.calSpan);gotoMonthOf(ui.sel);render();break;
     case 'cal-prev':case 'cal-next':
@@ -3072,6 +3162,7 @@ document.addEventListener('change',function(e){
   if(t.id==='f-father'||t.id==='f-mother'){refreshHebPreview();return;}
   if(/^m-sp-\d+$/.test(t.id)){var nm=$('#m-nm-'+t.id.slice(5));if(nm) nm.hidden=!!t.value;return;}
   if(t.id==='import-file'&&t.files&&t.files[0]){importData(t.files[0]);t.value='';return;}
+  if(t.dataset&&t.dataset.tpdf){var to=tpdf(),tk=t.dataset.tpdf;to[tk]=t.type==='checkbox'?t.checked:(tk==='split'?(+t.value||0):t.value);lsSet('fl-tpdf',to);return;}
   var a=t.dataset&&t.dataset.actChange;
   if(a==='tree-root'){ui.treeRoot=t.value;setCalWho(t.value);ui.zoomFit=true;render();}
   if(a==='cal-who'){setCalWho(t.value);render();}
