@@ -1780,8 +1780,12 @@ function drawerView(p){
     h+='<button class="btn sm primary" data-act="edit" data-pid="'+esc(p.id)+'">Edit</button>';
     if(sp.length<=1) h+='<button class="btn sm" data-act="add-rel" data-r="child" data-pid="'+esc(p.id)+'"'+(sp[0]?' data-sp="'+esc(sp[0].pid)+'"':'')+'>Add child</button>';
     h+='<button class="btn sm" data-act="add-rel" data-r="spouse" data-pid="'+esc(p.id)+'">'+(sp.length?'Add another marriage':'Add spouse')+'</button>';
-    if(!pr.father) h+='<button class="btn sm" data-act="add-rel" data-r="father" data-pid="'+esc(p.id)+'">Add father</button>';
-    if(!pr.mother) h+='<button class="btn sm" data-act="add-rel" data-r="mother" data-pid="'+esc(p.id)+'">Add mother</button>';
+    h+='<button class="btn sm" data-act="add-rel" data-r="sibling" data-pid="'+esc(p.id)+'">Add brother or sister</button>';
+    /* a brother or sister shares a parent, so with no parent entered yet, that comes first */
+    var ask=drawer&&drawer.sibAsk?' data-then="sibling"':'';
+    if(ask) h+='<p class="note" style="flex-basis:100%;margin:2px 0 0">To add a brother or sister, first add a father or mother for <bdi>'+esc(primaryText(p))+'</bdi>. The form for the brother or sister opens right after.</p>';
+    if(!pr.father) h+='<button class="btn sm'+(ask?' primary':'')+'" data-act="add-rel" data-r="father" data-pid="'+esc(p.id)+'"'+ask+'>Add father</button>';
+    if(!pr.mother) h+='<button class="btn sm'+(ask?' primary':'')+'" data-act="add-rel" data-r="mother" data-pid="'+esc(p.id)+'"'+ask+'>Add mother</button>';
   }
   h+='</footer>';
   return h;
@@ -1790,6 +1794,12 @@ function ageNote(p){if(p.deceased) return '';var a=ageAt(p,TODAY);return a!=null
 
 /* ---------- Drawer: edit form ---------- */
 function newDraft(){return {id:null,first:'',last:'',gender:'',hebFirst:'',hebLast:'',fatherHeb:'',motherHeb:'',birth:'',birthSunset:false,birthNoYear:false,hideAge:false,maiden:'',hebMaiden:'',deceased:false,death:'',deathSunset:false,father:'',mother:'',marriages:[],others:[],phone:'',email:'',notes:''};}
+function siblingDrawer(pid){
+  var base=P(pid),pr=parentsOf(base),dr=newDraft(),ln=pr.father||pr.mother;
+  dr.father=pr.father?pr.father.id:'';dr.mother=pr.mother?pr.mother.id:'';
+  dr.last=ln.last;dr.hebLast=ln.hebLast;
+  return {mode:'edit',draft:dr,link:{type:'sibling',of:pid,label:'Brother or sister of '+primaryText(base)}};
+}
 function draftFrom(p){
   var d=JSON.parse(JSON.stringify(p)),pr=parentsOf(p);
   d.father=pr.father?pr.father.id:'';d.mother=pr.mother?pr.mother.id:'';
@@ -1916,10 +1926,11 @@ function applyDraft(){
       if(drawer.link.type==='father') c.fatherHeb='';else c.motherHeb='';
     }
   }
+  var then=isNew&&drawer.link&&drawer.link.then==='sibling'&&P(drawer.link.of)?drawer.link.of:null;
   markDirty();
-  drawer={mode:'view',pid:id};
+  drawer=then?siblingDrawer(then):{mode:'view',pid:id};
   renderAll();
-  toast(isNew?fullName(p)+' added — remember to save.':'Changes applied — remember to save.');
+  toast(isNew?fullName(p)+' added'+(then?' — now the brother or sister.':' — remember to save.'):'Changes applied — remember to save.');
 }
 function deletePerson(id){
   data.people=data.people.filter(function(p){return p.id!==id;});
@@ -2800,6 +2811,12 @@ document.addEventListener('click',function(e){
     case 'add-rel':
       if(!editable()) return;
       var base=P(pid),dr=newDraft(),r=t.dataset.r,label;
+      if(r==='sibling'){
+        var bp=parentsOf(base);
+        if(bp.father||bp.mother) drawer=siblingDrawer(pid);
+        else{drawer.sibAsk=true;drawer.keepScroll=true;}
+        renderDrawer();break;
+      }
       if(r==='child'){
         var spo=t.dataset.sp?P(t.dataset.sp):null;
         if(base.gender==='f'||(spo&&spo.gender==='m')){dr.mother=base.id;dr.father=spo?spo.id:'';}else{dr.father=base.id;dr.mother=spo?spo.id:'';}
@@ -2816,7 +2833,7 @@ document.addEventListener('click',function(e){
         if(other) dr.marriages=[{id:null,spouse:other.id,date:'',sunset:false,divorced:false}];
         label=(r==='father'?'Father':'Mother')+' of '+primaryText(base);
       }
-      drawer={mode:'edit',draft:dr,link:{type:r,of:pid,label:label}};renderDrawer();break;
+      drawer={mode:'edit',draft:dr,link:{type:r,of:pid,label:label,then:t.dataset.then||''}};renderDrawer();break;
     case 'add-marriage':syncDraft();drawer.draft.marriages.push({id:null,spouse:'',date:'',sunset:false,divorced:false,nameHe:'',nameEn:''});drawer.keepScroll=true;renderDrawer();break;
     case 'rm-marriage':syncDraft();drawer.draft.marriages.splice(+t.dataset.i,1);drawer.keepScroll=true;renderDrawer();break;
     case 'add-other':syncDraft();drawer.draft.others.push({title:'',date:'',sunset:false});drawer.keepScroll=true;renderDrawer();break;
