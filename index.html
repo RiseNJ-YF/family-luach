@@ -740,7 +740,7 @@ function calFilter(){
   var set=whoSet(p.id);
   return function(e){return visible(e)&&(!e.pids.length||e.pids.some(function(x){return set[x];}));};
 }
-function whoTitle(){var p=calWho();return p?'Family of '+coupleLabel(p):'';}
+function whoTitle(){var p=calWho();return p?'Family of '+shortCouple(p):'';}
 function whoHTML(id){
   var cur=calWho(),list=data.people.filter(function(p){return kidsOf(p.id).length||spousesOf(p.id).length||(cur&&p.id===cur.id);})
     .sort(function(a,b){return primaryText(a).localeCompare(primaryText(b));});
@@ -770,6 +770,14 @@ function evShort(e){
     default:return esc(e.title);
   }
 }
+/* The year the date being marked first happened — born, married, passed away — in that date's own calendar. */
+function originYear(e){
+  if(e.n==null||e.kind==='holiday') return '';
+  if(e.kind==='birthday'&&noAge(P(e.pids[0]))) return '';
+  if(e.cal==='heb'&&e.h) return gem(e.h.y%1000);
+  return String(gFromAbs(e.abs).y-e.n);
+}
+function originHTML(e){var y=originYear(e);return !y?'':e.cal==='heb'?'<span class="he" dir="rtl" lang="he">'+esc(y)+'</span>':y;}
 function evSub(e,pdf){
   var bits=[];
   if(e.cal==='heb'&&e.h) bits.push(esc(fmtH(e.h,false))+' · '+'<span class="he" dir="rtl" lang="he">'+esc(fmtHe(e.h,false))+'</span>');
@@ -778,6 +786,8 @@ function evSub(e,pdf){
   if(e.kind==='yahrzeit') bits.push(e.cal==='heb'?ord(e.n)+' yahrzeit · begins at sundown '+esc(fmtG(e.abs-1,{wd:true,yr:false})):e.n+(e.n===1?' year':' years')+' since passing');
   if(e.kind==='other') bits.push(e.n+(e.n===1?' year':' years'));
   if(e.kind==='holiday') bits.push(esc(fmtH(H.fromAbs(e.abs),false)));
+  /* in printed lists, the year it began: born 1978, married 2003, passed away 1999 */
+  if(pdf&&originYear(e)) bits.push('<span style="white-space:nowrap">'+{birthday:'born ',anniversary:'married ',yahrzeit:'passed away ',other:'since '}[e.kind]+originHTML(e)+'</span>');
   return bits.join(' · ');
 }
 function hmark(e){return e.cal==='heb'&&e.kind!=='holiday'?'<span class="hmark" title="Hebrew-calendar date" aria-label="Hebrew-calendar date">א</span>':'';}
@@ -1122,6 +1132,13 @@ function treeRoots(){
   return out;
 }
 function countDesc(id){return genCounts(id).reduce(function(a,b){return a+b;},0);}
+/* Short: "יצחק וטובה גולד" / "Yitzchak & Tova Gold" — the person and their (current) husband or wife. */
+function shortCouple(p){
+  if(!p) return '';
+  var sp=spousesOf(p.id).filter(function(s){return !s.m.divorced;}).map(function(s){return P(s.pid);}).filter(Boolean),q=sp[sp.length-1];
+  if(p.hebFirst){var hl=p.hebLast||(q&&q.hebLast)||'';return (q&&q.hebFirst?p.hebFirst+' ו'+q.hebFirst:p.hebFirst)+(hl?' '+hl:'');}
+  var l=p.last||(q&&q.last)||'';return (q?p.first+' & '+q.first:p.first)+(l?' '+l:'');
+}
 function coupleLabel(p){return chainOf(p.id,{}).map(function(id){return primaryText(P(id));}).join(' & ');}
 function tcard(p,isRoot,placed,pdf,ghost,note){
   var b=parseISO(p.birth),d=parseISO(p.death),dates='',hd='';
@@ -2272,7 +2289,7 @@ function evFilter(o){
     return !set||e.pids.some(function(x){return set[x];});
   };
 }
-function prnWho(o){var p=o&&o.who?P(o.who):null;return p?'Family of '+coupleLabel(p):'';}
+function prnWho(o){var p=o&&o.who?P(o.who):null;return p?'Family of '+shortCouple(p):'';}
 /* options that don't apply to a kind of print (they stay on screen, greyed out) */
 var PNA={
   tree:{other:'the tree shows no other dates',hol:'the tree shows no holidays'},
@@ -2442,7 +2459,7 @@ function exportSpec(kind){
     spec.fit=true;spec.title='Calendar · '+mt.t+' · '+mt.sub+(wt?' · '+wt:'');spec.file='Calendar '+mt.t+(wp?' - '+primaryText(wp):'');spec.body=pxMonthGrid(PW-80);
   } else if(kind==='tree'){
     var roots=treeRoots(),root=wp?wp.id:(roots[0]?roots[0].id:currentRoot());
-    spec.title='Family tree · '+coupleLabel(P(root));spec.file='Family tree';
+    spec.title='Family tree · '+shortCouple(P(root));spec.file='Family tree';
     var tsc=useTreeStyle(ui.treeStyle);
     if(ui.treeLayout==='outline') spec.blocks=outlineParts(root,true).map(function(r){return {html:'<div class="otree'+tsc+(ui.calMode==='heb'?' rtl':'')+'">'+r+'</div>'};});
     else{spec.fit=true;spec.body=tsc?'<div class="tsw'+tsc+'">'+treeMarkup(root,true)+'</div>':treeMarkup(root,true);}
@@ -2763,7 +2780,7 @@ function vecText(pdf){
     seq.forEach(function(s,i){
       var t=s.t,txt=t.w.replace(/ /g,' ');
       /* a Hebrew word is written in visual order: letters reversed, and brackets mirrored */
-      if(t.rtl) txt=Array.from(txt).reverse().join('').replace(/[()]/g,function(ch){return ch==='('?')':'(';});
+      if(t.rtl) txt=Array.from(txt).reverse().join('').replace(/[()]/g,function(ch){return ch==='('?')':'(';}).replace(/\d+/g,function(n){return n.split('').reverse().join('');});
       font(t.b,size);var c=rgb(t.c);pdf.setTextColor(c[0],c[1],c[2]);
       pdf.text(txt,cx,y,{baseline:'alphabetic',isInputVisual:true,isOutputVisual:true,isInputRtl:false,isOutputRtl:false});
       cx+=width(t.w,t.b,size)+(s.gap&&i<seq.length-1?sw:0);
@@ -2808,6 +2825,8 @@ function wallSegs(e){
     case 'yahrzeit':segs=segs.concat(nameSegs(p,true));if(PRN&&PRN.en&&hebName(p)) segs.push({t:' ('+fullName(p)+')'});segs.push({t:' · '+ord(e.n)});break;
     default:segs.push({t:(e.title||'Anniversary')+' · '});segs=segs.concat(nameSegs(p));
   }
+  /* the year it began, in brackets: (1978), or the Hebrew year for a Hebrew-calendar date */
+  var oy=originYear(e);if(oy) segs.push({t:' ('+oy+')'});
   return segs;
 }
 function loadPdfLib(){return window.jspdf&&window.jspdf.jsPDF?Promise.resolve():loadScript(LIB_PDF);}
@@ -2833,7 +2852,7 @@ function makeWall(o){
     eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(evFilter(o)).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
     /* header */
     var who=o.who?P(o.who):null;
-    T.draw([{t:ttl,b:true}].concat(who?[{t:'  ·  Family of ',c:INK2},{t:coupleLabel(who),c:INK2}]:[]),M,M+headH*0.5,headH*0.42,'left');
+    T.draw([{t:ttl,b:true}].concat(who?[{t:'  ·  Family of ',c:INK2},{t:shortCouple(who),c:INK2}]:[]),M,M+headH*0.5,headH*0.42,'left');
     T.draw([{t:yt.t+' · ',c:INK2,b:true},{t:yt.he,c:INK2,b:true},{t:' · '+yt.sub,c:INK2,b:true}],M,M+headH*0.86,headH*0.2,'left');
     var legend=[['birthday','Birthday'],['hbirthday','Hebrew birthday'],['anniversary','Anniversary'],['yahrzeit','Yahrzeit'],['other','Other date'],['holiday','Holiday']];
     var ls=fs*1.15,lx=W-M,ly=M+headH*0.45;
@@ -2893,7 +2912,7 @@ function makeWall(o){
         });
         var yy=ey;
         shown.forEach(function(b){
-          if(b.hol){T.drawLine(b.lines[0],heb?dx+dW-3.5:dx+3.5,yy+plan.lh*0.82,plan.s,heb?'right':'left');yy+=b.h+2;return;}
+          if(b.hol){b.lines.forEach(function(line,li){T.drawLine(line,heb?dx+dW-3.5:dx+3.5,yy+plan.lh*(li+0.82),plan.s,heb?'right':'left');});yy+=b.h+2;return;}
           var key=kkey(b.e);
           fill(KTINT[key]);pdf.rect(dx+3.5,yy,dW-7,b.h,'F');
           fill(KHEX[key]);pdf.rect(heb?dx+dW-3.5-2.4:dx+3.5,yy,2.4,b.h,'F');
