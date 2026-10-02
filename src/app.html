@@ -703,7 +703,8 @@ function eventsBetween(a0,a1){
   data.marriages.forEach(function(m){
     var md=parseISO(m.date),A=P(m.a),B=P(m.b);
     if(!md||m.divorced||!A||A.deceased||(B&&B.deceased)) return;
-    var pids=B?[m.a,m.b]:[m.a],sn=B?'':soloName(m);
+    /* a couple is named husband first */
+    var pids=B?(A.gender==='f'&&B.gender==='m'?[m.b,m.a]:[m.a,m.b]):[m.a],sn=B?'':soloName(m);
     for(y=gy0;y<=gy1;y++) if(y>md.y) push(gAnniv(md,y),{kind:'anniversary',cal:'greg',pids:pids,sn:sn,n:y-md.y});
     var mh=hebOf(m.date,m.sunset);for(y=hy0;y<=hy1;y++) if(y>mh.y) push(hebAnniv(mh,y),{kind:'anniversary',cal:'heb',pids:pids,sn:sn,n:y-mh.y,h:mh});
   });
@@ -743,7 +744,7 @@ function whoHTML(id){
 }
 function kkey(e){return e.kind==='birthday'&&e.cal==='heb'?'hbirthday':e.kind;}
 function kindClass(e){return 'k-'+kkey(e);}
-function names(e){return e.pids.map(function(id){return nameHTML(P(id));}).join(' & ')+(e.sn?' & '+snHTML(e.sn):'');}
+function names(e){var w=e.sn&&e.pids.length===1&&(P(e.pids[0])||{}).gender==='f';return w?snHTML(e.sn)+' & '+nameHTML(P(e.pids[0])):e.pids.map(function(id){return nameHTML(P(id));}).join(' & ')+(e.sn?' & '+snHTML(e.sn):'');}
 function evTitle(e){
   var p=P(e.pids[0]);
   switch(e.kind){
@@ -1129,8 +1130,10 @@ function countDesc(id){return genCounts(id).reduce(function(a,b){return a+b;},0)
 function shortCouple(p){
   if(!p) return '';
   var sp=spousesOf(p.id).filter(function(s){return !s.m.divorced;}).map(function(s){return P(s.pid);}).filter(Boolean),q=sp[sp.length-1];
-  if(p.hebFirst){var hl=p.hebLast||(q&&q.hebLast)||'';return (q&&q.hebFirst?p.hebFirst+' ו'+q.hebFirst:p.hebFirst)+(hl?' '+hl:'');}
-  var l=p.last||(q&&q.last)||'';return (q?p.first+' & '+q.first:p.first)+(l?' '+l:'');
+  /* the husband first, with his family name */
+  var a=p,b=q;if(q&&p.gender==='f'&&q.gender==='m'){a=q;b=p;}
+  if(a.hebFirst){var hl=a.hebLast||(b&&b.hebLast)||'';return (b&&b.hebFirst?a.hebFirst+' ו'+b.hebFirst:a.hebFirst)+(hl?' '+hl:'');}
+  var l=a.last||(b&&b.last)||'';return (b?a.first+' & '+b.first:a.first)+(l?' '+l:'');
 }
 function coupleLabel(p){return chainOf(p.id,{}).map(function(id){return primaryText(P(id));}).join(' & ');}
 function tcard(p,isRoot,placed,pdf,ghost,note){
@@ -2803,8 +2806,10 @@ function coupleText(e){
   var ps=e.pids.map(P);
   if(ps.length===1){
     var p=ps[0],sn=e.sn||'',full=/\s/.test(sn);
-    if(p.hebFirst&&(!sn||/[֐-׿]/.test(sn))){var hl=p.hebLast?' '+p.hebLast:'';return full?p.hebFirst+hl+' ו'+sn:p.hebFirst+(sn?' ו'+sn:'')+hl;}
+    var wf=sn&&p.gender==='f';
+    if(p.hebFirst&&(!sn||/[֐-׿]/.test(sn))){var hl=p.hebLast?' '+p.hebLast:'';if(wf) return full?sn+' ו'+p.hebFirst+hl:sn+' ו'+p.hebFirst+hl;return full?p.hebFirst+hl+' ו'+sn:p.hebFirst+(sn?' ו'+sn:'')+hl;}
     var el=p.last?' '+p.last:'';
+    if(wf) return full?sn+' & '+firstName(p)+el:sn+' & '+firstName(p)+el;
     return full?firstName(p)+el+' & '+sn:firstName(p)+(sn?' & '+sn:'')+el;
   }
   if(ps.every(function(p){return p&&p.hebFirst;})){var last=ps[0].hebLast||ps[1].hebLast||'';return ps[0].hebFirst+' ו'+ps[1].hebFirst+(last?' '+last:'');}
@@ -2845,10 +2850,15 @@ function makeWall(o){
     eventsBetween(ms[0].a0,ms[ms.length-1].a1).filter(evFilter(o)).forEach(function(e){(by[e.abs]=by[e.abs]||[]).push(e);});
     /* header */
     var who=o.who?P(o.who):null;
-    T.draw([{t:ttl,b:true}].concat(who?[{t:'  ·  Family of ',c:INK2},{t:shortCouple(who),c:INK2}]:[]),M,M+headH*0.5,headH*0.42,'left');
-    T.draw([{t:yt.t+' · ',c:INK2,b:true},{t:yt.he,c:INK2,b:true},{t:' · '+yt.sub,c:INK2,b:true}],M,M+headH*0.86,headH*0.2,'left');
     var legend=[['birthday','Birthday'],['hbirthday','Hebrew birthday'],['anniversary','Anniversary'],['yahrzeit','Yahrzeit'],['other','Other date'],['holiday','Holiday']];
     var ls=fs*1.15,lx=W-M,ly=M+headH*0.45;
+    /* the title shrinks if it would reach the legend on the right */
+    var legW=o.legend?legend.reduce(function(t,k){return t+T.width([{t:k[1]}],ls)+ls*2.85;},0):0;
+    var tsegs=[{t:ttl,b:true}].concat(who?[{t:'  ·  Family of ',c:INK2},{t:shortCouple(who),c:INK2}]:[]),ts=headH*0.42,room=W-2*M-legW-ls*3,tw=T.width(tsegs,ts);
+    if(tw>room) ts=Math.max(headH*0.18,ts*room/tw);
+    T.draw(tsegs,M,M+headH*0.5,ts,'left');
+    var ysegs=[{t:yt.t+' · ',c:INK2,b:true},{t:yt.he,c:INK2,b:true},{t:' · '+yt.sub,c:INK2,b:true}];
+    T.draw(ysegs,M,M+headH*0.86,headH*0.2,'left');
     if(o.legend) legend.slice().reverse().forEach(function(k){
       var w=T.width([{t:k[1]}],ls);lx-=w;T.draw([{t:k[1],c:INK2}],lx,ly,ls,'left');
       lx-=ls*0.35+ls*0.9;fill(KHEX[k[0]]);pdf.rect(lx,ly-ls*0.8,ls*0.9,ls*0.9,'F');lx-=ls*1.6;
