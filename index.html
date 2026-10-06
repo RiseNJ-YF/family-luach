@@ -2330,7 +2330,7 @@ var PNA={
   month:{counts:'calendars show no counts'},
   year:{counts:'calendars show no counts',split:'only for one-page prints'},
   spiral:{counts:'calendars show no counts',split:'each page is one sheet'},
-  wall:{counts:'calendars show no counts',split:'the wall calendar is one sheet',hq:'the wall calendar is always sharp',foot:'the wall calendar has no footer'},
+  wall:{counts:'calendars show no counts',split:'the wall calendar is one sheet',foot:'the wall calendar has no footer'},
   upcoming:{counts:'the list shows no counts',split:'only for one-page prints'},
   people:{other:'the directory shows no other dates',hol:'the directory shows no holidays',split:'only for one-page prints',legend:'the directory has no legend'}
 };
@@ -2583,6 +2583,14 @@ function makePdf(opts){
     pw=pdf.internal.pageSize.getWidth();ph=pdf.internal.pageSize.getHeight();
     /* sharpness: about 150 dots per inch on paper (300 in high quality), within what a browser can draw */
     var dpi=o&&o.hq?300:150,pv=!!opts.preview;
+    var name=(data.meta.familyName+' - '+spec.file+(o&&o.paper!=='letter'?' ('+PAPERS[o.paper][2].replace(/ in$/,'')+')':'')).replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
+    /* a vector PDF (sharp at any size); if anything in it fails, the pages are saved as pictures as before */
+    if(!opts.raster) return vecPdf({pages:pages,pw:pw,ph:ph,land:land,fit:!!spec.fit,split:split,name:name}).then(function(v){
+      if(!pv) return {blob:v.blob,name:name,pages:v.pages,cols:split||1,vector:true};
+      return pdfPreviews(v.blob).then(function(ims){return {blob:v.blob,name:name,pages:v.pages,previews:ims,cols:split||1,vector:true};});
+    }).catch(function(err){if(window.console) console.warn('Vector PDF failed; saving pictures instead',err);return raster();});
+    return raster();
+    function raster(){
     function scaleFor(pg,inchesWide){var w=pg.offsetWidth,h=pg.offsetHeight;if(pv) return Math.min(1.25,2600/Math.max(w,h));var sc=Math.max(2,inchesWide*dpi/w);return Math.min(sc,15000/Math.max(w,h),Math.sqrt(180e6/(w*h)));}
     /* a preview picture of one sheet: the paper's shape, with the content where the PDF puts it */
     function sheet(src,x,y,w,h,label,marks){
@@ -2647,10 +2655,414 @@ function makePdf(opts){
       });
     }
     return chain.then(function(){
-      var name=(data.meta.familyName+' - '+spec.file+(o&&o.paper!=='letter'?' ('+PAPERS[o.paper][2].replace(/ in$/,'')+')':'')).replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim()+'.pdf';
       return {blob:pv?null:pdf.output('blob'),name:name,pages:count,previews:previews,cols:split||1};
     });
+    }
   }).then(function(r){if(stage) stage.remove();window.scrollTo(0,sy);return r;},function(err){if(stage) stage.remove();window.scrollTo(0,sy);throw err;});
+}
+/* ---------- Vector PDF: a laid-out page, drawn as real PDF shapes and text ----------
+   Every print except the wall calendar is laid out as a web page first (the page the preview used to
+   be a picture of). Here that page becomes real PDF drawing, so it stays sharp at any size:
+   boxes, borders and lines as shapes; every word as text in the page's own font (downloaded as a TTF,
+   or the built-in Alef if it can't be); the SVG ornaments through svg2pdf; and the odd symbol the
+   fonts don't have (⚭) as a tiny sharp picture. Each word is put exactly where the browser put it, so
+   the PDF matches the page. Hebrew words are written in visual order (letters reversed, numbers kept). */
+var LIB_SVG2PDF='https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.4/dist/svg2pdf.umd.min.js';
+var LIB_PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',LIB_PDFJS_W='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+var VF_URL='https://cdn.jsdelivr.net/fontsource/fonts/';
+/* the page's fonts → the font files: [file name, weights there are] */
+var VFONTS={assistant:['assistant',[200,300,400,500,600,700,800]],'frank ruhl libre':['frank-ruhl-libre',[300,400,500,600,700,800,900]],
+  heebo:['heebo',[100,200,300,400,500,600,700,800,900]],bellefair:['bellefair',[400]],'david libre':['david-libre',[400,500,700]],
+  georgia:'frank ruhl libre',serif:'frank ruhl libre','segoe ui':'assistant','sans-serif':'assistant'};
+var VFC={};  /* font files already downloaded (kept for the next PDF): key → a promise of base64, or of false */
+function vfB64(buf){var s='',b=new Uint8Array(buf);for(var i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s);}
+function vfLoad(key){
+  if(!VFC[key]){var p=key.split('|');VFC[key]=fetch(VF_URL+p[0]+'@latest/'+p[1]+'-'+p[2]+'-normal.ttf').then(function(r){if(!r.ok) throw new Error(r.status);return r.arrayBuffer();}).then(vfB64,function(){return false;});}
+  return VFC[key];
+}
+/* the font files that could draw this text, best first */
+function vfCands(fam,wt,sc){
+  var out=[];
+  String(fam).split(',').forEach(function(n){
+    n=n.trim().replace(/^["']|["']$/g,'').toLowerCase();var f=VFONTS[n];if(typeof f==='string') f=VFONTS[f];if(!f) return;
+    var w=f[1].reduce(function(a,b){return Math.abs(b-wt)<Math.abs(a-wt)?b:a;});
+    var key=f[0]+'|'+sc+'|'+w;if(out.indexOf(key)<0) out.push(key);
+  });
+  if(!out.length) out.push('assistant|'+sc+'|'+[200,300,400,500,600,700,800].reduce(function(a,b){return Math.abs(b-wt)<Math.abs(a-wt)?b:a;}));
+  return out;
+}
+/* which font file a character is in: the Hebrew one, the Latin one, or neither (drawn as a picture) */
+function vfClass(ch){
+  var c=ch.codePointAt(0);
+  if((c>=0x590&&c<=0x5FF)||(c>=0xFB1D&&c<=0xFB4F)) return 'hebrew';
+  if(c<=0xFF||c===0x131||c===0x152||c===0x153||(c>=0x2000&&c<=0x206F)||c===0x20AC||c===0x2122||c===0x2212||c===0x2215||c===0x2191||c===0x2193||c===0x2C6||c===0x2DA||c===0x2DC) return 'latin';
+  return 'sym';
+}
+/* a word as it looks: a Hebrew word's letters reversed (brackets mirrored, numbers kept in order) */
+function vfVisual(w){
+  if(!/[֐-׿]/.test(w)) return w;
+  var MIR={'(':')',')':'(','[':']',']':'[','{':'}','}':'{','<':'>','>':'<'};
+  return Array.from(w).reverse().join('').replace(/[()[\]{}<>]/g,function(ch){return MIR[ch];}).replace(/\d+([.,:\/]\d+)*/g,function(n){return n.split('').reverse().join('');});
+}
+/* does a font added to this PDF have a glyph for this character? */
+function vfHas(pdf,f,c){
+  var F=pdf.internal.getFont(f[0],f[1]),m=F&&F.metadata&&F.metadata.cmap&&F.metadata.cmap.unicode&&F.metadata.cmap.unicode.codeMap;
+  return m?!!m[c]:true;
+}
+function vfRuns(s){var out=[];Array.from(s).forEach(function(ch){var c=vfClass(ch),l=out[out.length-1];if(l&&l.c===c) l.s+=ch;else out.push({s:ch,c:c});});return out;}
+var VCX=null,VASC={};
+function vfCtx(){if(!VCX) VCX=document.createElement('canvas').getContext('2d');return VCX;}
+function vfAsc(font){if(VASC[font]==null){var x=vfCtx();x.font=font;var m=x.measureText('Hgש');VASC[font]=m.fontBoundingBoxAscent!=null?m.fontBoundingBoxAscent:m.actualBoundingBoxAscent;}return VASC[font];}
+function vPx(v){return parseFloat(v)||0;}
+function vCol(s){var m=/rgba?\(([^)]+)\)/.exec(s||'');if(!m) return null;var p=m[1].split(/[\s,\/]+/).filter(Boolean).map(parseFloat);return {r:p[0],g:p[1],b:p[2],a:p.length>3?p[3]:1};}
+function vLen(v,ref){return /%$/.test(v)?parseFloat(v)/100*ref:vPx(v);}
+
+/* Read a page into a list of drawing steps (in the page's own pixels), and the fonts it needs. */
+function vecScene(root){
+  var rr=root.getBoundingClientRect(),X0=rr.left,Y0=rr.top,ops=[],needs={},K=0.5523;
+  function box(r){return {x:r.left-X0,y:r.top-Y0,w:r.width,h:r.height};}
+  function P(M,x,y){return [M.ox+x*M.k,M.oy+y*M.k];}
+  /* a rounded rectangle path (each corner its own two radii), not yet filled or stroked */
+  function rr4(pdf,M,b,R){
+    var x=b.x,y=b.y,w=b.w,h=b.h,p;
+    p=P(M,x+R[0][0],y);pdf.moveTo(p[0],p[1]);
+    p=P(M,x+w-R[1][0],y);pdf.lineTo(p[0],p[1]);
+    if(R[1][0]||R[1][1]){var a=P(M,x+w-R[1][0]*(1-K),y),c=P(M,x+w,y+R[1][1]*(1-K)),e=P(M,x+w,y+R[1][1]);pdf.curveTo(a[0],a[1],c[0],c[1],e[0],e[1]);}
+    p=P(M,x+w,y+h-R[2][1]);pdf.lineTo(p[0],p[1]);
+    if(R[2][0]||R[2][1]){a=P(M,x+w,y+h-R[2][1]*(1-K));c=P(M,x+w-R[2][0]*(1-K),y+h);e=P(M,x+w-R[2][0],y+h);pdf.curveTo(a[0],a[1],c[0],c[1],e[0],e[1]);}
+    p=P(M,x+R[3][0],y+h);pdf.lineTo(p[0],p[1]);
+    if(R[3][0]||R[3][1]){a=P(M,x+R[3][0]*(1-K),y+h);c=P(M,x,y+h-R[3][1]*(1-K));e=P(M,x,y+h-R[3][1]);pdf.curveTo(a[0],a[1],c[0],c[1],e[0],e[1]);}
+    p=P(M,x,y+R[0][1]);pdf.lineTo(p[0],p[1]);
+    if(R[0][0]||R[0][1]){a=P(M,x,y+R[0][1]*(1-K));c=P(M,x+R[0][0]*(1-K),y);e=P(M,x+R[0][0],y);pdf.curveTo(a[0],a[1],c[0],c[1],e[0],e[1]);}
+    pdf.close();
+  }
+  function radii(st,b){
+    var R=['borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius'].map(function(k){var p=String(st[k]||'0').split(' ');return [vLen(p[0],b.w),vLen(p[1]||p[0],b.h)];});
+    var f=Math.min(1,b.w/((R[0][0]+R[1][0])||1e9),b.w/((R[3][0]+R[2][0])||1e9),b.h/((R[0][1]+R[3][1])||1e9),b.h/((R[1][1]+R[2][1])||1e9));
+    return R.map(function(r){return [r[0]*f,r[1]*f];});
+  }
+  function inset(b,R,t,r,bm,l){
+    return {b:{x:b.x+l,y:b.y+t,w:b.w-l-r,h:b.h-t-bm},R:[[R[0][0]-l,R[0][1]-t],[R[1][0]-r,R[1][1]-t],[R[2][0]-r,R[2][1]-bm],[R[3][0]-l,R[3][1]-bm]].map(function(q){return [Math.max(0,q[0]),Math.max(0,q[1])];})};
+  }
+  function alpha(pdf,a,fn){
+    if(a>=0.995) return fn();
+    pdf.saveGraphicsState();pdf.setGState(new pdf.GState({opacity:a,'stroke-opacity':a}));
+    var r=fn();if(r&&r.then) return r.then(function(){pdf.restoreGraphicsState();});
+    pdf.restoreGraphicsState();
+  }
+  function fillC(pdf,c){pdf.setFillColor(c.r,c.g,c.b);}
+  /* a border ring: the outer shape minus the inner one, filled */
+  function ring(pdf,M,b,R,w){
+    rr4(pdf,M,b,R);var i=inset(b,R,w[0],w[1],w[2],w[3]);if(i.b.w>0.01&&i.b.h>0.01) rr4(pdf,M,i.b,i.R);
+    pdf.fillEvenOdd();
+  }
+  function borders(b,st,a){
+    var N=['Top','Right','Bottom','Left'],S=N.map(function(n){var s={w:vPx(st['border'+n+'Width']),s:st['border'+n+'Style'],c:vCol(st['border'+n+'Color'])};return s.w>0&&s.s!=='none'&&s.s!=='hidden'&&s.c&&s.c.a>0?s:null;});
+    if(!S.some(Boolean)) return;
+    var R=radii(st,b),W=S.map(function(s){return s?s.w:0;});
+    /* sides that look alike are drawn together: dashed or dotted ones as strokes, the rest as filled rings */
+    var G={},order=[];
+    S.forEach(function(s,i){
+      if(!s) return;
+      var line=s.s==='dashed'||s.s==='dotted',key=(line?s.s:s.s==='double'?'double':'fill')+'|'+s.c.r+','+s.c.g+','+s.c.b+','+s.c.a;
+      if(!G[key]){G[key]={s:s,line:line,dbl:s.s==='double',on:[false,false,false,false]};order.push(key);}
+      G[key].on[i]=true;
+    });
+    var all=order.length===1;
+    order.forEach(function(key){
+      var g=G[key];
+      if(g.line) ops.push(function(pdf,M){return alpha(pdf,a*g.s.c.a,function(){dashSides(pdf,M,b,R,W,g);});});
+      else if(all) ops.push(function(pdf,M){return alpha(pdf,a*g.s.c.a,function(){fillC(pdf,g.s.c);if(g.dbl) dbl(pdf,M,b,R,W);else ring(pdf,M,b,R,W);});});
+      else g.on.forEach(function(on,i){
+        if(!on) return;
+        ops.push(function(pdf,M){
+          return alpha(pdf,a*g.s.c.a,function(){
+            /* the side's slice: a triangle from its two outer corners (a little beyond) to the middle of the box */
+            var x1=b.x-2,y1=b.y-2,x2=b.x+b.w+2,y2=b.y+b.h+2,cx=b.x+b.w/2,cy=b.y+b.h/2;
+            var Q=[[[x1,y1],[x2,y1]],[[x2,y1],[x2,y2]],[[x2,y2],[x1,y2]],[[x1,y2],[x1,y1]]][i].concat([[cx,cy]]);
+            pdf.saveGraphicsState();
+            var p=P(M,Q[0][0],Q[0][1]);pdf.moveTo(p[0],p[1]);for(var j=1;j<3;j++){p=P(M,Q[j][0],Q[j][1]);pdf.lineTo(p[0],p[1]);}pdf.close();pdf.clip();pdf.discardPath();
+            fillC(pdf,g.s.c);if(g.dbl) dbl(pdf,M,b,R,W);else ring(pdf,M,b,R,W);
+            pdf.restoreGraphicsState();
+          });
+        });
+      });
+    });
+  }
+  /* double: two thin rings, a third of the width each */
+  function dbl(pdf,M,b0,R0,w0){
+    var t=w0.map(function(x){return x/3;}),i=inset(b0,R0,2*t[0],2*t[1],2*t[2],2*t[3]);ring(pdf,M,b0,R0,t);ring(pdf,M,i.b,i.R,t);
+  }
+  /* dashes and dots: a stroke along the middle of the sides in g.on, round the corners between them */
+  function dashSides(pdf,M,b,R,W,g){
+    var on=g.on,lw=Math.max.apply(null,W.filter(function(x,i){return on[i];})),h=W.map(function(x){return x/2;}),cb={x:b.x+h[3],y:b.y+h[0],w:b.w-h[1]-h[3],h:b.h-h[0]-h[2]};
+    var C=R.map(function(r,i){var a1=i===0||i===3?h[3]:h[1],b1=i<2?h[0]:h[2];return [Math.max(0,r[0]-a1),Math.max(0,r[1]-b1)];});
+    var x1=cb.x,y1=cb.y,x2=cb.x+cb.w,y2=cb.y+cb.h,K=0.5523;
+    pdf.setDrawColor(g.s.c.r,g.s.c.g,g.s.c.b);pdf.setLineWidth(lw*M.k);
+    if(g.s.s==='dotted'){pdf.setLineCap('round');pdf.setLineDashPattern([0.01,2*lw*M.k],0);}else{pdf.setLineCap('butt');pdf.setLineDashPattern([Math.max(2,lw*3)*M.k,Math.max(2,lw*3)*M.k],0);}
+    /* each side runs between its corner curves; a side whose neighbour isn't drawn here runs to the corner of the box */
+    var st0=[[x1+C[0][0],y1],[x2,y1+C[1][1]],[x2-C[2][0],y2],[x1,y2-C[3][1]]],en=[[x2-C[1][0],y1],[x2,y2-C[2][1]],[x1+C[3][0],y2],[x1,y1+C[0][1]]];
+    var stE=[[b.x+(W[3]?C[0][0]+h[3]:0),y1],[x2,b.y+(W[0]?C[1][1]+h[0]:0)],[b.x+b.w-(W[1]?C[2][0]+h[1]:0),y2],[x1,b.y+b.h-(W[2]?C[3][1]+h[2]:0)]];
+    var enE=[[b.x+b.w-(W[1]?C[1][0]+h[1]:0),y1],[x2,b.y+b.h-(W[2]?C[2][1]+h[2]:0)],[b.x+(W[3]?C[3][0]+h[3]:0),y2],[x1,b.y+(W[0]?C[0][1]+h[0]:0)]];
+    var arc=function(i){var c=C[i],q;if(i===1) q=[[x2-c[0]*(1-K),y1],[x2,y1+c[1]*(1-K)],[x2,y1+c[1]]];else if(i===2) q=[[x2,y2-c[1]*(1-K)],[x2-c[0]*(1-K),y2],[x2-c[0],y2]];else if(i===3) q=[[x1+c[0]*(1-K),y2],[x1,y2-c[1]*(1-K)],[x1,y2-c[1]]];else q=[[x1,y1+c[1]*(1-K)],[x1+c[0]*(1-K),y1],[x1+c[0],y1]];
+      var A=P(M,q[0][0],q[0][1]),B=P(M,q[1][0],q[1][1]),E=P(M,q[2][0],q[2][1]);pdf.curveTo(A[0],A[1],B[0],B[1],E[0],E[1]);};
+    if(on.every(Boolean)){rr4(pdf,M,cb,C);pdf.stroke();}
+    else for(var s0=0;s0<4;s0++){
+      if(!on[s0]||on[(s0+3)%4]) continue;
+      var p=P(M,stE[s0][0],stE[s0][1]);pdf.moveTo(p[0],p[1]);
+      for(var i=s0;;i=(i+1)%4){
+        var nx=(i+1)%4;
+        if(on[nx]&&nx!==s0){p=P(M,en[i][0],en[i][1]);pdf.lineTo(p[0],p[1]);arc(nx);}
+        else{p=P(M,enE[i][0],enE[i][1]);pdf.lineTo(p[0],p[1]);break;}
+      }
+      pdf.stroke();
+    }
+    pdf.setLineDashPattern([],0);pdf.setLineCap('butt');
+  }
+  var SVGS={};
+  function svgText(uri){
+    if(SVGS[uri]!=null) return SVGS[uri];
+    var i=uri.indexOf(','),head=uri.slice(0,i),body=uri.slice(i+1);
+    return SVGS[uri]=/;base64/.test(head)?atob(body):decodeURIComponent(body);
+  }
+  /* an SVG to draw: with no viewBox its drawing is in its own pixels, so it gets one, to scale with the page */
+  function svgEl(txt,w,h){
+    if(!/xmlns=/.test(txt)) txt=txt.replace(/<svg\b/,'<svg xmlns="http://www.w3.org/2000/svg"');
+    var el=new DOMParser().parseFromString(txt,'image/svg+xml').documentElement;
+    if(!el.getAttribute('viewBox')){var sw=parseFloat(el.getAttribute('width'))||w,sh=parseFloat(el.getAttribute('height'))||h;if(sw>0&&sh>0){el.setAttribute('viewBox','0 0 '+sw+' '+sh);el.setAttribute('preserveAspectRatio','none');}}
+    return el;
+  }
+  function svgSize(txt){
+    var w=/<svg[^>]*\swidth="([\d.]+)/.exec(txt),h=/<svg[^>]*\sheight="([\d.]+)/.exec(txt),vb=/viewBox="([^"]+)"/.exec(txt);
+    if(w&&h) return [+w[1],+h[1]];if(vb){var v=vb[1].split(/[\s,]+/);return [+v[2],+v[3]];}return [100,100];
+  }
+  function drawImg(pdf,M,uri,x,y,w,h){
+    var p=P(M,x,y);
+    if(/^data:image\/svg\+xml/.test(uri)) return pdf.svg(svgEl(svgText(uri)),{x:p[0],y:p[1],width:w*M.k,height:h*M.k});
+    if(/^data:image\/(png|jpe?g)/.test(uri)) pdf.addImage(uri,/png/.test(uri)?'PNG':'JPEG',p[0],p[1],w*M.k,h*M.k);
+  }
+  /* background images, as CSS places them: size, position, repeat */
+  function bgImages(b,st,a,R){
+    var urls=[],re=/url\("([^"]*)"\)/g,m;while((m=re.exec(st.backgroundImage||''))) urls.push(m[1]);
+    if(!urls.length) return;
+    var L=function(s){return String(s||'').split(',').map(function(x){return x.trim();});};
+    var SZ=L(st.backgroundSize),PS=L(st.backgroundPosition),RP=L(st.backgroundRepeat);
+    var pb={x:b.x+vPx(st.borderLeftWidth),y:b.y+vPx(st.borderTopWidth),w:b.w-vPx(st.borderLeftWidth)-vPx(st.borderRightWidth),h:b.h-vPx(st.borderTopWidth)-vPx(st.borderBottomWidth)};
+    for(var n=urls.length-1;n>=0;n--)(function(uri,sz,ps,rp){
+      if(!/^data:image\//.test(uri)) return;
+      var nat=/svg/.test(uri)?svgSize(svgText(uri)):[pb.w,pb.h],iw=nat[0],ih=nat[1],w,h;
+      if(sz==='contain'||sz==='cover'){var s=sz==='contain'?Math.min(pb.w/iw,pb.h/ih):Math.max(pb.w/iw,pb.h/ih);w=iw*s;h=ih*s;}
+      else{var t=sz.split(/\s+/);w=t[0]&&t[0]!=='auto'?vLen(t[0],pb.w):null;h=t[1]&&t[1]!=='auto'?vLen(t[1],pb.h):null;
+        if(w==null&&h==null){w=iw;h=ih;}else if(w==null) w=h*iw/ih;else if(h==null) h=w*ih/iw;}
+      if(!(w>0&&h>0)) return;
+      var q=ps.split(/\s+/),pos=function(v,room){return /%$/.test(v)?room*parseFloat(v)/100:vPx(v);};
+      var x=pb.x+pos(q[0]||'0%',pb.w-w),y=pb.y+pos(q[1]||q[0]||'0%',pb.h-h);
+      var r2=rp.split(/\s+/),rx=/^(repeat|space|round)$/.test(r2[0])||r2[0]==='repeat-x',ry=r2[0]==='repeat-y'||(r2.length>1?/^(repeat|space|round)$/.test(r2[1]):/^(repeat|space|round)$/.test(r2[0]));
+      if(r2[0]==='repeat-x') ry=false;
+      var xs=[x],ys=[y];
+      if(rx){xs=[];for(var xx=x-Math.ceil((x-b.x)/w)*w;xx<b.x+b.w;xx+=w) xs.push(xx);}
+      if(ry){ys=[];for(var yy=y-Math.ceil((y-b.y)/h)*h;yy<b.y+b.h;yy+=h) ys.push(yy);}
+      ops.push(function(pdf,M){
+        return alpha(pdf,a,function(){
+          var clip=rx||ry;
+          if(clip){pdf.saveGraphicsState();rr4(pdf,M,b,R);pdf.clip();pdf.discardPath();}
+          var ch=Promise.resolve();
+          ys.forEach(function(Y){xs.forEach(function(Xx){ch=ch.then(function(){return drawImg(pdf,M,uri,Xx,Y,w,h);});});});
+          return ch.then(function(){if(clip) pdf.restoreGraphicsState();});
+        });
+      });
+    })(urls[n],SZ[n%SZ.length]||'auto',PS[n%PS.length]||'0% 0%',RP[n%RP.length]||'repeat');
+  }
+  function paintBox(b,st,a){
+    if(b.w<=0&&b.h<=0) return;
+    var R=radii(st,b),bg=vCol(st.backgroundColor);
+    if(bg&&bg.a>0&&b.w>0&&b.h>0) ops.push(function(pdf,M){return alpha(pdf,a*bg.a,function(){fillC(pdf,bg);rr4(pdf,M,b,R);pdf.fill();});});
+    bgImages(b,st,a,R);
+    borders(b,st,a);
+  }
+  function pseudo(el,st,r,which,a){
+    var ps=getComputedStyle(el,which);
+    if(!ps||ps.content==='none'||ps.content==='normal'||ps.display==='none'||(ps.position!=='absolute'&&ps.position!=='fixed')) return;
+    var bl=vPx(st.borderLeftWidth),bt=vPx(st.borderTopWidth),pw=r.width-bl-vPx(st.borderRightWidth),ph=r.height-bt-vPx(st.borderBottomWidth);
+    var cb=ps.boxSizing==='border-box',ex=cb?0:vPx(ps.paddingLeft)+vPx(ps.paddingRight)+vPx(ps.borderLeftWidth)+vPx(ps.borderRightWidth),ey=cb?0:vPx(ps.paddingTop)+vPx(ps.paddingBottom)+vPx(ps.borderTopWidth)+vPx(ps.borderBottomWidth);
+    var w=vPx(ps.width)+ex,h=vPx(ps.height)+ey;
+    var x=ps.left!=='auto'?vPx(ps.left)+vPx(ps.marginLeft):pw-vPx(ps.right)-vPx(ps.marginRight)-w;
+    var y=ps.top!=='auto'?vPx(ps.top)+vPx(ps.marginTop):ph-vPx(ps.bottom)-vPx(ps.marginBottom)-h;
+    var pa=a*(parseFloat(ps.opacity)||1);
+    paintBox({x:r.left-X0+bl+x,y:r.top-Y0+bt+y,w:w,h:h},ps,pa);
+  }
+  var rg=document.createRange();
+  function text(node,st,a){
+    var col=vCol(st.color);if(!col||col.a*a<0.01) return;
+    var fs=vPx(st.fontSize),wt=parseInt(st.fontWeight,10)||400,fam=st.fontFamily,ls=st.letterSpacing==='normal'?0:vPx(st.letterSpacing),tt=st.textTransform;
+    var font=(st.fontStyle==='italic'?'italic ':'')+wt+' '+fs+'px '+fam,asc=vfAsc(font),re=/\S+/g,m,s=node.data;
+    while((m=re.exec(s))){
+      rg.setStart(node,m.index);rg.setEnd(node,m.index+m[0].length);
+      var rs=rg.getClientRects();if(!rs.length) continue;
+      var r=rs.length>1&&Math.abs(rs[0].top-rs[rs.length-1].top)>2?rs[0]:rg.getBoundingClientRect();
+      if(r.width<=0) continue;
+      var w=m[0];if(tt==='uppercase') w=w.toUpperCase();else if(tt==='lowercase') w=w.toLowerCase();else if(tt==='capitalize') w=w.charAt(0).toUpperCase()+w.slice(1);
+      var runs=vfRuns(vfVisual(w));
+      runs.forEach(function(q){if(q.c!=='sym') needs[fam+'|'+wt+'|'+q.c]={fam:fam,wt:wt,c:q.c};else{var x=vfCtx();x.font=font;q.px=x.measureText(q.s).width;}});
+      (function(b,runs){
+        ops.push(function(pdf,M){
+          /* each letter in the page's font if that font has it, else in Alef, else as a picture */
+          var k=M.k,T=b.w*k,parts=[],alef=['Alef',wt>=600?'bold':'normal'];
+          var add=function(f,ch){var l=parts[parts.length-1];if(l&&l.f===f) l.s+=ch;else parts.push({f:f,s:ch});};
+          runs.forEach(function(q){
+            var f=q.c==='sym'?null:M.fm[fam+'|'+wt+'|'+q.c];
+            Array.from(q.s).forEach(function(ch){
+              var c=ch.codePointAt(0);
+              if(f&&vfHas(pdf,f,c)) add(f,ch);else if(vfHas(pdf,alef,c)) add(alef,ch);else add(null,ch);
+            });
+          });
+          parts.forEach(function(p){
+            p.q={s:p.s,c:p.f?'txt':'sym'};
+            if(!p.f){var x=vfCtx();x.font=font;p.q.px=x.measureText(p.s).width;p.w=p.q.px*k;return;}
+            pdf.setFont(p.f[0],p.f[1]);pdf.setFontSize(fs*k);p.w=pdf.getTextWidth(p.s)+ls*k*Array.from(p.s).length;
+          });
+          var Wt=parts.reduce(function(t,p){return t+p.w;},0),sc=Wt>0?T/Wt:1;
+          if(Math.abs(sc-1)<0.04) sc=1;sc=Math.max(0.7,Math.min(1.3,sc));
+          var cx=M.ox+b.x*k+(T-Wt*sc)/2,by=M.oy+(b.y+asc)*k;
+          return alpha(pdf,a*col.a,function(){
+            parts.forEach(function(p){
+              if(p.q.c==='sym'){
+                /* a symbol no font file has: a small picture of it, drawn sharp */
+                var Z=8,cv=document.createElement('canvas'),hpx=b.h;cv.width=Math.max(1,Math.ceil(p.q.px*Z));cv.height=Math.max(1,Math.ceil(hpx*Z));
+                var g=cv.getContext('2d');g.scale(Z,Z);g.font=font;g.fillStyle='rgb('+col.r+','+col.g+','+col.b+')';g.textBaseline='alphabetic';g.fillText(p.q.s,0,asc);
+                pdf.addImage(cv.toDataURL('image/png'),'PNG',cx,M.oy+b.y*k,p.q.px*k*sc,hpx*k,'sym'+p.q.s+font+col.r+col.g+col.b);
+              } else {
+                pdf.setFont(p.f[0],p.f[1]);pdf.setFontSize(fs*k);pdf.setTextColor(col.r,col.g,col.b);
+                var o={baseline:'alphabetic'};if(ls) o.charSpace=ls*k;if(sc!==1) o.horizontalScale=sc;
+                pdf.text(p.q.s,cx,by,o);
+              }
+              cx+=p.w*sc;
+            });
+          });
+        });
+      })(box(r),runs);
+    }
+  }
+  function walk(el,a){
+    var st=getComputedStyle(el);
+    if(st.display==='none') return;
+    a*=parseFloat(st.opacity);if(!(a>0.01)) return;
+    var r=el.getBoundingClientRect(),b=box(r),vis=st.visibility!=='hidden';
+    if(el instanceof SVGElement){
+      if(!vis||!(b.w>0&&b.h>0)) return;
+      var src=el.outerHTML;
+      ops.push(function(pdf,M){return alpha(pdf,a,function(){var p=P(M,b.x,b.y);return pdf.svg(svgEl(src,b.w,b.h),{x:p[0],y:p[1],width:b.w*M.k,height:b.h*M.k});});});
+      return;
+    }
+    if(/^(STYLE|SCRIPT|TEMPLATE|BR|WBR|INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return;
+    if(vis) paintBox(b,st,a);
+    if(el.tagName==='IMG'&&vis&&/^data:image\//.test(el.src)){var src2=el.src;ops.push(function(pdf,M){return alpha(pdf,a,function(){return drawImg(pdf,M,src2,b.x,b.y,b.w,b.h);});});}
+    if(vis) pseudo(el,st,r,'::before',a);
+    var clip=el!==root&&(st.overflowX!=='visible'||st.overflowY!=='visible');
+    if(clip){
+      var R=radii(st,b),ins=inset(b,R,vPx(st.borderTopWidth),vPx(st.borderRightWidth),vPx(st.borderBottomWidth),vPx(st.borderLeftWidth));
+      ops.push(function(pdf,M){pdf.saveGraphicsState();rr4(pdf,M,ins.b,ins.R);pdf.clip();pdf.discardPath();});
+    }
+    for(var n=el.firstChild;n;n=n.nextSibling){
+      if(n.nodeType===3){if(vis&&/\S/.test(n.data)) text(n,st,a);}
+      else if(n.nodeType===1) walk(n,a);
+    }
+    if(clip) ops.push(function(pdf){pdf.restoreGraphicsState();});
+    if(vis) pseudo(el,st,r,'::after',a);
+  }
+  walk(root,1);
+  return {ops:ops,needs:needs,w:rr.width,h:rr.height};
+}
+/* Run a page's drawing steps at a place and scale on the PDF page (M: k = points per pixel, ox/oy = where the page's corner goes). */
+function vecRun(pdf,M,ops){
+  var i=0;
+  return new Promise(function(res,rej){
+    (function next(){
+      try{while(i<ops.length){var r=ops[i++](pdf,M);if(r&&r.then){r.then(next,rej);return;}}res();}catch(e){rej(e);}
+    })();
+  });
+}
+/* Load the fonts the pages use and add them to the PDF; returns, for each font the page asked for, the PDF font to use */
+function vecFonts(pdf,needs){
+  var fm={},keys=Object.keys(needs),added={};
+  return Promise.all(keys.map(function(nk){
+    var n=needs[nk],c=vfCands(n.fam,n.wt,n.c);
+    var tryi=function(i){
+      if(i>=c.length){fm[nk]=['Alef',n.wt>=600?'bold':'normal'];return null;}
+      return vfLoad(c[i]).then(function(b64){
+        if(!b64) return tryi(i+1);
+        var name=c[i].replace(/\|/g,'-');
+        if(!added[name]){pdf.addFileToVFS(name+'.ttf',b64);pdf.addFont(name+'.ttf',name,'normal');added[name]=1;}
+        fm[nk]=[name,'normal'];
+      });
+    };
+    return tryi(0);
+  })).then(function(){return fm;});
+}
+/* The whole PDF: each laid-out page fitted to the paper, or one big page cut into overlapping tiles */
+function vecPdf(V){
+  var libs=window.jspdf&&window.jspdf.jsPDF&&window.jspdf.jsPDF.API.svg?Promise.resolve():loadScript(LIB_SVG2PDF);
+  return libs.then(function(){
+    var pdf=new window.jspdf.jsPDF({orientation:V.land?'landscape':'portrait',unit:'pt',format:[V.pw,V.ph],compress:true});
+    pdf.setProperties({title:V.name.replace(/\.pdf$/i,''),creator:'Family Luach'});
+    pdf.addFileToVFS('Alef-Regular.ttf',$('#font-alef-regular').textContent.trim());pdf.addFont('Alef-Regular.ttf','Alef','normal');
+    pdf.addFileToVFS('Alef-Bold.ttf',$('#font-alef-bold').textContent.trim());pdf.addFont('Alef-Bold.ttf','Alef','bold');
+    var scenes=V.pages.map(vecScene),needs={};
+    scenes.forEach(function(s){Object.assign(needs,s.needs);});
+    return vecFonts(pdf,needs).then(function(fm){
+      var chain=Promise.resolve(),count=0;
+      var page=function(){if(count) pdf.addPage([V.pw,V.ph],V.land?'landscape':'portrait');count++;};
+      if(V.split){
+        /* one big page, cut into tiles 'split' across: where two tiles meet, both print 1/8" past the join */
+        var sc=scenes[0],m=0.35*72,tw=V.pw-2*m,th=V.ph-2*m,ov=72/8,S=V.split,k=(S*tw-(S-1)*2*ov)/sc.w,stX=tw-2*ov,stY=th-2*ov,Hpt=sc.h*k;
+        var rows=Hpt>th+0.5?1+Math.ceil((Hpt-th)/stY-0.01):1;
+        for(var r=0;r<rows;r++) for(var c=0;c<S;c++)(function(r,c){
+          chain=chain.then(function(){
+            page();
+            pdf.saveGraphicsState();pdf.rect(m,m,tw,th,null);pdf.clip();pdf.discardPath();
+            return vecRun(pdf,{k:k,ox:m-c*stX,oy:m-r*stY,fm:fm},sc.ops).then(function(){
+              pdf.restoreGraphicsState();
+              /* marks only in the white margin: at each join line, 1/8" in from the edge, on both pages */
+              var right=c<S-1,below=r<rows-1,left=c>0,above=r>0,gp=3,L=14,mk=[];
+              var vt=function(x){mk.push([x,m-gp,x,m-gp-L],[x,m+th+gp,x,m+th+gp+L]);};
+              var ht=function(y){mk.push([m-gp,y,m-gp-L,y],[m+tw+gp,y,m+tw+gp+L,y]);};
+              if(right) vt(m+tw-ov);if(left) vt(m+ov);if(below) ht(m+th-ov);if(above) ht(m+ov);
+              pdf.setDrawColor(51);pdf.setLineWidth(.5);mk.forEach(function(s){pdf.line(s[0],s[1],s[2],s[3]);});
+              pdf.setFont('helvetica','normal');pdf.setFontSize(7);pdf.setTextColor(150);
+              pdf.text('Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+S+' — where pages meet, cut one along the marks and lay its edge on the marks of the other (both print 1/8" past the line), then tape',m+30,V.ph-m/2);
+            });
+          });
+        })(r,c);
+      } else {
+        scenes.forEach(function(sc){
+          chain=chain.then(function(){
+            page();
+            var k=Math.min(V.pw/sc.w,V.ph/sc.h),w=sc.w*k,h=sc.h*k;
+            return vecRun(pdf,{k:k,ox:(V.pw-w)/2,oy:V.fit?Math.max(0,(V.ph-h)/2):0,fm:fm},sc.ops);
+          });
+        });
+      }
+      return chain.then(function(){return {blob:pdf.output('blob'),pages:count};});
+    });
+  });
+}
+/* Pictures of a PDF's pages for the preview, drawn from the PDF itself */
+function pdfPreviews(blob,width){
+  var lib=window.pdfjsLib?Promise.resolve():loadScript(LIB_PDFJS);
+  return lib.then(function(){
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc=LIB_PDFJS_W;
+    return blob.arrayBuffer();
+  }).then(function(buf){return window.pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise;}).then(function(doc){
+    var out=[],ch=Promise.resolve();
+    for(var i=1;i<=doc.numPages;i++)(function(i){
+      ch=ch.then(function(){return doc.getPage(i);}).then(function(pg){
+        var v0=pg.getViewport({scale:1}),vp=pg.getViewport({scale:(width||900)/v0.width}),cv=document.createElement('canvas');
+        cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
+        return pg.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise.then(function(){out.push(cv.toDataURL('image/jpeg',.85));});
+      });
+    })(i);
+    return ch.then(function(){doc.destroy();return out;});
+  });
 }
 /* ---------- Wall calendar: the whole year on one large sheet, drawn as a vector PDF ----------
    Lines, boxes and text are real PDF shapes and text in the embedded Alef font, so the sheet stays
@@ -2702,7 +3114,7 @@ function printViewHTML(){
 function pdfName(typed,auto){var t=String(typed||'').replace(/\.pdf$/i,'').replace(/[\\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();return t?t+'.pdf':auto;}
 function printSave(){
   if(exporting) return;exporting=true;paintPreview();
-  var pv=ui.pv,kind=printKind(),p=kind==='wall'&&pv&&pv.out&&pv.out.blob&&pv.key===printKey()?Promise.resolve(pv.out):makePdf({kind:kind});
+  var pv=ui.pv,kind=printKind(),p=pv&&pv.out&&pv.out.blob&&pv.key===printKey()?Promise.resolve(pv.out):makePdf({kind:kind});
   p.then(function(out){return saveFile(pdfName(popt(kind).file,out.name),out.blob,'application/pdf');}).then(function(){toast('PDF saved.');},function(e){
     var c=e&&e.code;
     if(c==='declined') toast('Export cancelled.');
@@ -2763,7 +3175,7 @@ function printPane(t){
   h+='<div class="sec"><b>Paper</b><div class="row"><span class="flab">Orientation</span><div class="seg" role="group" aria-label="Orientation"><button data-act="popt" data-k="orient" data-v="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="popt" data-k="orient" data-v="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';
   h+='<div class="row"><label class="flab" for="p-paper">Size</label><select class="sel" id="p-paper" data-popt="paper">'+Object.keys(PAPERS).map(function(x){return '<option value="'+x+'"'+(o.paper===x?' selected':'')+'>'+PAPERS[x][2]+'</option>';}).join('')+'</select></div>';
   h+='<div class="row'+(na.split?' dis':'')+'"><label class="flab" for="p-split">Pages</label><select class="sel" id="p-split" data-popt="split"'+(na.split?' disabled':'')+'><option value="0">'+(k==='tree'||k==='month'?'All on one page':'As many pages as needed')+'</option>'+[2,3,4,5].map(function(n){return '<option value="'+n+'"'+(!na.split&&o.split===n?' selected':'')+'>'+n+' pages across (tape together)</option>';}).join('')+'</select></div>';
-  h+='<div class="row">'+pChk(o,na,'hq','High quality (print shop, bigger file)')+'</div>'+naNote(na,['split','hq'])+'</div>';
+  h+=naNote(na,['split'])+'</div>';
   /* 5 · heading */
   h+='<div class="sec"><b>Heading</b><div class="row"><label class="flab" for="p-title">Title</label><input class="inp" id="p-title" data-popt="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div>';
   h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend'])+'</div>';
