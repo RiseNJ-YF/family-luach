@@ -2763,10 +2763,10 @@ function printPane(t){
   h+='<div class="row">'+pChk(o,na,'hq','High quality (print shop, bigger file)')+'</div>'+naNote(na,['split','hq'])+'</div>';
   /* 5 · heading */
   h+='<div class="sec"><b>Heading</b><div class="row"><label class="flab" for="p-title">Title</label><input class="inp" id="p-title" data-popt="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div>';
-  h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend']);
-  /* the file name, under Title: its label on its own line so the box gets the column's width */
+  h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend'])+'</div>';
+  /* 6 · file: the label on its own line, so the name box gets the column's full width */
   var auto=ui.pv&&ui.pv.out&&ui.pv.out.name?ui.pv.out.name.replace(/\.pdf$/i,''):'';
-  h+='<div class="row"><label class="flab" for="p-file">File name</label></div><div class="row pfile"><input class="inp" id="p-file" data-popt="file" dir="auto" value="'+esc(o.file||'')+'" placeholder="'+esc(auto)+'"><span class="flab">.pdf</span></div></div>';
+  h+='<div class="sec"><b>File</b><div class="row"><label class="flab" for="p-file">File name</label></div><div class="row pfile"><input class="inp" id="p-file" data-popt="file" dir="auto" value="'+esc(o.file||'')+'" placeholder="'+esc(auto)+'"><span class="flab">.pdf</span></div></div>';
   return h;
 }
 var HEB=/[֐-׿]/,STRONG=/[A-Za-zÀ-ɏ֐-׿]/;
