@@ -2674,7 +2674,10 @@ function printPane(t){
   var TITLES={tree:['Family tree','The family tree, card by card.'],calendar:['Calendar','A month, a whole year, the wall calendar or a spiral calendar. In Hebrew everything reads right to left.'],upcoming:['Upcoming dates','The coming birthdays, anniversaries and yahrzeits, as a list.'],people:['Family directory','Everyone in the family with their details, as a list.']};
   PLBL.cover='Cover page';
   h='<h3>'+TITLES[t][0]+'</h3><p class="lead">'+TITLES[t][1]+'</p>';
-  /* 1 · what to print (the only group that differs) */
+  /* 1 · whose family (first) */
+  var cur=o.who&&P(o.who)?o.who:'',ppl=data.people.filter(function(p){return kidsOf(p.id).length||spousesOf(p.id).length||p.id===cur;}).sort(function(a,b){return primaryText(a).localeCompare(primaryText(b));});
+  h+='<div class="sec"><b>Whose family</b><div class="row"><select class="sel" id="p-who" data-popt="who" aria-label="Whose family" style="max-width:100%"><option value="">Everyone</option>'+ppl.map(function(p){return '<option value="'+esc(p.id)+'"'+(p.id===cur?' selected':'')+'>From '+esc(primaryText(p))+' down</option>';}).join('')+'</select></div></div>';
+  /* 2 · what to print (the only group that differs) */
   h+='<div class="sec"><b>What to print</b>';
   if(t==='tree'){
     h+='<div class="row"><label class="flab" for="p-layout">Layout</label><select class="sel" id="p-layout" data-act-change="tree-layout">';
@@ -2697,9 +2700,6 @@ function printPane(t){
     h+='<div class="row"><label class="flab" for="p-sort">Sort by</label><select class="sel" id="p-sort" data-popt="sort">'+[['last','Last name'],['first','First name'],['birth','Birth date (oldest first)']].map(function(x){return '<option value="'+x[0]+'"'+(o.sort===x[0]?' selected':'')+'>'+x[1]+'</option>';}).join('')+'</select></div>';
   }
   h+='<div class="row"><span class="flab">Direction</span><div class="seg" role="group" aria-label="Direction"><button data-act="calmode" data-m="greg" aria-pressed="'+!heb+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+heb+'">Hebrew</button></div></div></div>';
-  /* 2 · whose family */
-  var cur=o.who&&P(o.who)?o.who:'',ppl=data.people.filter(function(p){return kidsOf(p.id).length||spousesOf(p.id).length||p.id===cur;}).sort(function(a,b){return primaryText(a).localeCompare(primaryText(b));});
-  h+='<div class="sec"><b>Whose family</b><div class="row"><select class="sel" id="p-who" data-popt="who" aria-label="Whose family" style="max-width:100%"><option value="">Everyone</option>'+ppl.map(function(p){return '<option value="'+esc(p.id)+'"'+(p.id===cur?' selected':'')+'>From '+esc(primaryText(p))+' down</option>';}).join('')+'</select></div></div>';
   /* 3 · show */
   h+='<div class="sec"><b>Show</b><div class="row">'+pChk(o,na,'bday')+pChk(o,na,'anniv')+pChk(o,na,'yz')+pChk(o,na,'other')+pChk(o,na,'hol')+'</div>';
   h+='<div class="row"><span class="flab">Dates by</span>'+pChk(o,na,'greg')+pChk(o,na,'heb')+'</div>';
