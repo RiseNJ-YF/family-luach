@@ -410,15 +410,28 @@ textarea.inp{min-height:70px;resize:vertical}
 .dlg-pane h4.subh{margin:22px 0 6px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
 .dlg-box.wide{width:min(1440px,100%);height:min(920px,100%)}
 .dlg-box.wide .dlg-nav{width:190px}
-.pr-opts{flex:0 0 400px}
+.pr-tabs{flex:1;display:flex;justify-content:center;gap:2px;min-width:0;overflow-x:auto}
+.pr-tabs button{border:0;background:none;font:inherit;font-size:14px;color:var(--ink-2);padding:7px 12px;border-radius:8px;white-space:nowrap;cursor:pointer}
+.pr-tabs button:hover{background:var(--surface-2)}
+.pr-tabs button[aria-selected=true]{color:var(--ink);font-weight:700;box-shadow:inset 0 -3px 0 var(--accent);border-radius:8px 8px 0 0}
+.pr-opts{flex:0 0 600px;padding:12px 14px}.pr-cols{columns:2;column-gap:12px}
+.pr-opts .sec{break-inside:avoid;padding:9px 12px 10px;margin:0 0 10px;border-radius:10px}
+.pr-opts .sec>b{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3);margin-bottom:0}
+.pr-opts .row{margin-top:8px;gap:6px 10px}
+.pr-opts .sel{font-size:13px;padding:5px 8px;max-width:100%;min-width:0}
+.pr-opts .flab{font-size:12.5px}
+.pr-opts .check{font-size:13.5px}
+.pr-opts .note{font-size:12px;margin:6px 0 0;line-height:1.35}
+.pr-opts .seg button{padding:5px 10px}
 .pr-view{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--surface-2);border-inline-start:1px solid var(--line)}
 .pr-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--surface)}
 .pr-pages{flex:1;min-height:0;overflow:auto;padding:18px;display:flex;flex-direction:column;align-items:center;gap:16px;transition:opacity .15s}
 .pr-pages.busy{opacity:.5}
 .pr-pages>img{max-width:100%;background:#fff;box-shadow:0 2px 12px rgba(0,0,0,.18)}
 .pr-pages .pvw-frame{height:100%;min-height:400px}
-@media (max-width:1100px){.pr-opts{flex-basis:340px}}
-@media (max-width:720px){.dlg-box.wide .dlg-main{display:block;overflow:auto}.dlg-box.wide .dlg-nav{width:auto}.dlg-box.wide .dlg-pane,.dlg-box.wide .pr-pages{overflow:visible}.pr-view{border:0;border-top:1px solid var(--line)}.pr-bar{position:sticky;top:0;z-index:1}}
+@media (max-width:1180px){.pr-opts{flex-basis:500px}}
+@media (max-width:900px){.pr-opts{flex-basis:300px}.pr-cols{columns:1}}
+@media (max-width:720px){.dlg-head:has(.pr-tabs){flex-wrap:wrap}.pr-tabs{order:3;flex-basis:100%;justify-content:space-between;scrollbar-width:none}.pr-tabs button{padding:6px 4px;font-size:13px}.dlg-box.wide .dlg-main{display:block;overflow:auto}.dlg-box.wide .dlg-nav{width:auto}.dlg-box.wide .dlg-pane,.dlg-box.wide .pr-pages{overflow:visible}.pr-view{border:0;border-top:1px solid var(--line)}.pr-bar{position:sticky;top:0;z-index:1}}
 .check.dis,.row.dis{opacity:.45}
 .check.dis input{cursor:not-allowed}
 .sec{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px}
@@ -2619,10 +2632,11 @@ var WALL_SIZES={'18x24':[24,18,'18 × 24 in (ARCH C)'],'24x36':[36,24,'24 × 36 
 var PRINT_TABS=[['tree','Family tree'],['calendar','Calendar'],['upcoming','Upcoming dates'],['people','Family directory']];
 function printDialog(){
   var cur=PRINT_TABS.some(function(x){return x[0]===ui.printTab;})?ui.printTab:'tree';
-  var h='<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="prt-t"><div class="dlg-box wide"><div class="dlg-head"><h2 id="prt-t">Print / PDF</h2><button class="btn sm ghost" data-act="pdf-menu" aria-label="Close">Close ✕</button></div>';
-  h+='<div class="dlg-main"><nav class="dlg-nav" role="tablist" aria-label="What to print">';
+  var h='<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="prt-t"><div class="dlg-box wide"><div class="dlg-head"><h2 id="prt-t">Print / PDF</h2>';
+  h+='<nav class="pr-tabs" role="tablist" aria-label="What to print">';
   PRINT_TABS.forEach(function(t){h+='<button role="tab" data-act="print-tab" data-t="'+t[0]+'" aria-selected="'+(t[0]===cur)+'">'+t[1]+'</button>';});
-  return h+'</nav><div class="dlg-pane pr-opts" role="tabpanel">'+printPane(cur)+'</div><div class="pr-view" id="pr-view" aria-label="Preview">'+printViewHTML()+'</div></div></div></div>';
+  h+='</nav><button class="btn sm ghost" data-act="pdf-menu" aria-label="Close">Close ✕</button></div>';
+  return h+'<div class="dlg-main"><div class="dlg-pane pr-opts" role="tabpanel"><div class="pr-cols">'+printPane(cur)+'</div></div><div class="pr-view" id="pr-view" aria-label="Preview">'+printViewHTML()+'</div></div></div></div>';
 }
 /* What the window is set to print right now */
 function printKind(){var t=PRINT_TABS.some(function(x){return x[0]===ui.printTab;})?ui.printTab:'tree';return t==='calendar'?(ui.calKind||'month'):t;}
@@ -2671,9 +2685,8 @@ function pChk(o,na,k,label){var dis=na[k];return '<label class="check'+(dis?' di
 function naNote(na,keys){var n=keys.filter(function(k){return na[k];});return n.length?'<p class="note">'+n.map(function(k){return PLBL[k]+': '+na[k];}).join(' · ')+'</p>':'';}
 function printPane(t){
   var k=printKind(),o=popt(k),na=PNA[k]||{},heb=ui.calMode==='heb',h='';
-  var TITLES={tree:['Family tree','The family tree, card by card.'],calendar:['Calendar','A month, a whole year, the wall calendar or a spiral calendar. In Hebrew everything reads right to left.'],upcoming:['Upcoming dates','The coming birthdays, anniversaries and yahrzeits, as a list.'],people:['Family directory','Everyone in the family with their details, as a list.']};
   PLBL.cover='Cover page';
-  h='<h3>'+TITLES[t][0]+'</h3><p class="lead">'+TITLES[t][1]+'</p>';
+  h='';
   /* 1 · whose family (first) */
   var cur=o.who&&P(o.who)?o.who:'',ppl=data.people.filter(function(p){return kidsOf(p.id).length||spousesOf(p.id).length||p.id===cur;}).sort(function(a,b){return primaryText(a).localeCompare(primaryText(b));});
   h+='<div class="sec"><b>Whose family</b><div class="row"><select class="sel" id="p-who" data-popt="who" aria-label="Whose family" style="max-width:100%"><option value="">Everyone</option>'+ppl.map(function(p){return '<option value="'+esc(p.id)+'"'+(p.id===cur?' selected':'')+'>From '+esc(primaryText(p))+' down</option>';}).join('')+'</select></div></div>';
@@ -2686,11 +2699,11 @@ function printPane(t){
     TREE_STYLES.forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.treeStyle===x[0]?' selected':'')+'>'+x[1]+'</option>';});
     h+='</select></div>';
   } else if(t==='calendar'){
-    var ck=ui.calKind||'month',mt=monthTitle(),yt=yearTitle(),kseg=function(x,l){return '<button data-act="print-kind" data-k="'+x+'" aria-pressed="'+(ck===x)+'">'+l+'</button>';};
-    h+='<div class="row"><div class="seg" role="group" aria-label="Calendar kind">'+kseg('month','One month')+kseg('year','A whole year')+kseg('wall','Wall calendar')+kseg('spiral','Spiral calendar')+'</div></div>';
+    var ck=ui.calKind||'month',mt=monthTitle(),yt=yearTitle(),kseg=function(x,l,tip){return '<button data-act="print-kind" data-k="'+x+'" aria-pressed="'+(ck===x)+'"'+(tip?' title="'+esc(tip)+'"':'')+'>'+l+'</button>';};
+    h+='<div class="row"><div class="seg" role="group" aria-label="Calendar kind">'+kseg('month','Month')+kseg('year','Year')+kseg('wall','Wall')+kseg('spiral','Spiral','Each month: the month on top, with the names in its days, and its dates as a list below. Pages come in order, with room for the spiral — ready for a print shop to bind.')+'</div></div>';
     h+=ck==='month'?'<div class="row"><button class="btn sm ghost" data-act="p-month" data-d="-1" aria-label="Previous month">‹</button><b>'+esc(mt.t)+'</b><button class="btn sm ghost" data-act="p-month" data-d="1" aria-label="Next month">›</button></div>'
       :'<div class="row"><button class="btn sm ghost" data-act="p-year" data-d="-1" aria-label="Previous year">‹</button><b>'+esc(yt.t)+'</b><button class="btn sm ghost" data-act="p-year" data-d="1" aria-label="Next year">›</button></div>';
-    if(ck==='spiral') h+='<p class="note">Every month has a top page — the month, with the names in its days — and a bottom page with that month’s dates as a list. The pages come in order (cover, then each month’s top and bottom page), with room left for the spiral between them, ready for a print shop to bind.</p><div class="row">'+pChk(o,na,'cover','Cover page')+'</div>';
+    if(ck==='spiral') h+='<div class="row">'+pChk(o,na,'cover','Cover page')+'</div>';
   } else if(t==='upcoming'){
     h+='<div class="row"><label class="flab" for="p-horizon">How far ahead</label><select class="sel" id="p-horizon" data-act-change="p-horizon">';
     [[30,'The next 30 days'],[90,'The next 90 days'],[180,'The next 6 months'],[365,'The next year']].forEach(function(x){h+='<option value="'+x[0]+'"'+(ui.horizon===x[0]?' selected':'')+'>'+x[1]+'</option>';});
@@ -2702,14 +2715,14 @@ function printPane(t){
   h+='<div class="row"><span class="flab">Direction</span><div class="seg" role="group" aria-label="Direction"><button data-act="calmode" data-m="greg" aria-pressed="'+!heb+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+heb+'">Hebrew</button></div></div></div>';
   /* 3 · show */
   h+='<div class="sec"><b>Show</b><div class="row">'+pChk(o,na,'bday')+pChk(o,na,'anniv')+pChk(o,na,'yz')+pChk(o,na,'other')+pChk(o,na,'hol')+'</div>';
-  h+='<div class="row"><span class="flab">Dates by</span>'+pChk(o,na,'greg')+pChk(o,na,'heb')+'</div>';
+  h+='<div class="row"><span class="flab">Dates by</span>'+pChk(o,na,'greg','English')+pChk(o,na,'heb','Hebrew')+'</div>';
   h+='<div class="row">'+pChk(o,na,'en')+pChk(o,na,'counts')+'</div>'+naNote(na,['bday','anniv','yz','other','hol','greg','heb','en','counts'])+'</div>';
   /* 4 · paper */
   var por=o.orient==='portrait';
   h+='<div class="sec"><b>Paper</b><div class="row"><span class="flab">Orientation</span><div class="seg" role="group" aria-label="Orientation"><button data-act="popt" data-k="orient" data-v="landscape" aria-pressed="'+!por+'">Landscape</button><button data-act="popt" data-k="orient" data-v="portrait" aria-pressed="'+por+'">Portrait</button></div></div>';
   h+='<div class="row"><label class="flab" for="p-paper">Size</label><select class="sel" id="p-paper" data-popt="paper">'+Object.keys(PAPERS).map(function(x){return '<option value="'+x+'"'+(o.paper===x?' selected':'')+'>'+PAPERS[x][2]+'</option>';}).join('')+'</select></div>';
-  h+='<div class="row'+(na.split?' dis':'')+'"><label class="flab" for="p-split">Pages</label><select class="sel" id="p-split" data-popt="split"'+(na.split?' disabled':'')+'><option value="0">'+(k==='tree'||k==='month'?'All on one page':'As many pages as needed')+'</option>'+[2,3,4,5].map(function(n){return '<option value="'+n+'"'+(!na.split&&o.split===n?' selected':'')+'>Split over pages, '+n+' across (tape together)</option>';}).join('')+'</select></div>';
-  h+='<div class="row"><span class="flab">Quality</span>'+pChk(o,na,'hq','High quality — sharper, for a print shop (bigger file)')+'</div>'+naNote(na,['split','hq'])+'</div>';
+  h+='<div class="row'+(na.split?' dis':'')+'"><label class="flab" for="p-split">Pages</label><select class="sel" id="p-split" data-popt="split"'+(na.split?' disabled':'')+'><option value="0">'+(k==='tree'||k==='month'?'All on one page':'As many pages as needed')+'</option>'+[2,3,4,5].map(function(n){return '<option value="'+n+'"'+(!na.split&&o.split===n?' selected':'')+'>'+n+' pages across (tape together)</option>';}).join('')+'</select></div>';
+  h+='<div class="row">'+pChk(o,na,'hq','High quality (print shop, bigger file)')+'</div>'+naNote(na,['split','hq'])+'</div>';
   /* 5 · heading */
   h+='<div class="sec"><b>Heading</b><div class="row"><label class="flab" for="p-title">Title</label><input class="inp" id="p-title" data-popt="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div>';
   h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend'])+'</div>';
