@@ -2597,23 +2597,19 @@ function makePdf(opts){
     if(split){
       /* one big picture, cut into tiles: 'split' pages across, as many rows as it takes */
       var m=0.35*72,tw=pw-2*m,th=ph-2*m,ov=72/8;
-      chain=window.html2canvas(pages[0],{scale:pv?Math.min(1.25,2600/Math.max(pages[0].offsetWidth,pages[0].offsetHeight)):scaleFor(pages[0],(split*tw-(split-1)*ov)/72),backgroundColor:'#ffffff',logging:false,useCORS:true}).then(function(cv){
-        /* each page shows its own part plus 1/8" of its neighbour's (right and below), so the cut needn't be exact */
-        var ptPx=(split*tw-(split-1)*ov)/cv.width,tpw=tw/ptPx,tph=th/ptPx,sx=(tw-ov)/ptPx,sy=(th-ov)/ptPx;
+      chain=window.html2canvas(pages[0],{scale:pv?Math.min(1.25,2600/Math.max(pages[0].offsetWidth,pages[0].offsetHeight)):scaleFor(pages[0],(split*tw-(split-1)*2*ov)/72),backgroundColor:'#ffffff',logging:false,useCORS:true}).then(function(cv){
+        /* Where two pages meet, both print 1/8" past the join line, so whichever page is cut a little off, the other still covers it */
+        var ptPx=(split*tw-(split-1)*2*ov)/cv.width,tpw=tw/ptPx,tph=th/ptPx,sx=(tw-2*ov)/ptPx,sy=(th-2*ov)/ptPx;
         var rows=cv.height>tph+0.5?1+Math.ceil((cv.height-tph)/sy-0.01):1;
         for(var r=0;r<rows;r++) for(var c=0;c<split;c++){
           var x0=c*sx,y0=r*sy,wpx=Math.min(tpw,cv.width-x0),hpx=Math.min(tph,cv.height-y0),t=document.createElement('canvas');t.width=Math.round(tpw);t.height=Math.round(tph);
           var g=t.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,t.width,t.height);if(wpx>0&&hpx>0) g.drawImage(cv,x0,y0,wpx,hpx,0,0,wpx,hpx);
-          /* Marks only in the white margin, never on the picture:
-             corner marks where the picture ends on a side that joins the next page (trim the margin there), and
-             crosses 1/8" in on a side the previous page joins (lay that page's trimmed edge on them). */
-          var right=c<split-1,below=r<rows-1,left=c>0,above=r>0,gp=3,L=14,X=12,mk=[];
+          /* Marks only in the white margin, never on the picture: at each join line, 1/8" in from the edge, on both pages */
+          var right=c<split-1,below=r<rows-1,left=c>0,above=r>0,gp=3,L=14,mk=[];
           var vt=function(x){mk.push([x,m-gp,x,m-gp-L],[x,m+th+gp,x,m+th+gp+L]);};
           var ht=function(y){mk.push([m-gp,y,m-gp-L,y],[m+tw+gp,y,m+tw+gp+L,y]);};
-          var vx=function(x){[m-gp-X/2,m+th+gp+X/2].forEach(function(y){mk.push([x,y-X/2,x,y+X/2],[x-X/2,y,x+X/2,y]);});};
-          var hx=function(y){[m-gp-X/2,m+tw+gp+X/2].forEach(function(x){mk.push([x,y-X/2,x,y+X/2],[x-X/2,y,x+X/2,y]);});};
-          if(right) vt(m+tw);if(below) ht(m+th);if(left) vx(m+ov);if(above) hx(m+ov);
-          var lab='Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+(right||below?' — trim the '+(right&&below?'right and bottom margins':right?'right margin':'bottom margin')+' at the corner marks, then lay that edge on the crosses on the next page and tape':' — the other pages lay their trimmed edges on the crosses of this page');
+          if(right) vt(m+tw-ov);if(left) vt(m+ov);if(below) ht(m+th-ov);if(above) ht(m+ov);
+          var lab='Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+' — where pages meet, cut one along the marks and lay its edge on the marks of the other (both print 1/8" past the line), then tape';
           if(pv){previews.push(sheet(t,m,m,tw,th,lab,mk));count++;continue;}
           if(count) pdf.addPage([pw,ph],land?'landscape':'portrait');
           pdf.addImage(t.toDataURL('image/jpeg',q),'JPEG',m,m,tw,th);
