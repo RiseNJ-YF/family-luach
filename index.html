@@ -429,6 +429,7 @@ textarea.inp{min-height:70px;resize:vertical}
 .pr-opts .psub{font-size:12px;font-weight:600;color:var(--ink-2);margin-top:6px}
 .pr-opts .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;margin-top:3px;padding-inline-start:2px}
 .pr-opts .pgrid .full{grid-column:1/-1}
+.pr-opts .sec.file-sec{column-span:all;margin-top:0}
 .pick{position:relative}
 .pick-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:start;cursor:pointer;color:var(--ink)}
 .pick-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pick-btn i{font-style:normal;color:var(--ink-3);font-size:11px}
@@ -2594,13 +2595,21 @@ function makePdf(opts){
     var q=o&&o.hq?0.95:0.92,previews=[],count=0,chain=Promise.resolve();
     if(split){
       /* one big picture, cut into tiles: 'split' pages across, as many rows as it takes */
-      var m=0.35*72,tw=pw-2*m,th=ph-2*m;
-      chain=window.html2canvas(pages[0],{scale:pv?Math.min(1.25,2600/Math.max(pages[0].offsetWidth,pages[0].offsetHeight)):scaleFor(pages[0],split*tw/72),backgroundColor:'#ffffff',logging:false,useCORS:true}).then(function(cv){
-        var ptPx=split*tw/cv.width,tpw=cv.width/split,tph=th/ptPx,rows=Math.ceil(cv.height/tph-0.01);
+      var m=0.35*72,tw=pw-2*m,th=ph-2*m,ov=72/8;
+      chain=window.html2canvas(pages[0],{scale:pv?Math.min(1.25,2600/Math.max(pages[0].offsetWidth,pages[0].offsetHeight)):scaleFor(pages[0],(split*tw-(split-1)*ov)/72),backgroundColor:'#ffffff',logging:false,useCORS:true}).then(function(cv){
+        /* each page shows its own part plus 1/8" of its neighbour's (right and below), so the cut needn't be exact */
+        var ptPx=(split*tw-(split-1)*ov)/cv.width,tpw=tw/ptPx,tph=th/ptPx,sx=(tw-ov)/ptPx,sy=(th-ov)/ptPx;
+        var rows=cv.height>tph+0.5?1+Math.ceil((cv.height-tph)/sy-0.01):1;
         for(var r=0;r<rows;r++) for(var c=0;c<split;c++){
-          var hpx=Math.min(tph,cv.height-r*tph),t=document.createElement('canvas');t.width=Math.round(tpw);t.height=Math.round(tph);
-          var g=t.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,t.width,t.height);g.drawImage(cv,c*tpw,r*tph,tpw,hpx,0,0,tpw,hpx);
-          var lab='Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+' — trim along the grey line and tape the pages together';
+          var x0=c*sx,y0=r*sy,wpx=Math.min(tpw,cv.width-x0),hpx=Math.min(tph,cv.height-y0),t=document.createElement('canvas');t.width=Math.round(tpw);t.height=Math.round(tph);
+          var g=t.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,t.width,t.height);if(wpx>0&&hpx>0) g.drawImage(cv,x0,y0,wpx,hpx,0,0,wpx,hpx);
+          /* dashed cut lines where the overlap with the next page begins */
+          var right=c<split-1,below=r<rows-1,lw=Math.max(1,0.6/ptPx);
+          g.strokeStyle='#8A8A8A';g.lineWidth=lw;g.setLineDash([4/ptPx,3/ptPx]);g.beginPath();
+          if(right){g.moveTo(sx,0);g.lineTo(sx,t.height);}
+          if(below){g.moveTo(0,sy);g.lineTo(t.width,sy);}
+          g.stroke();g.setLineDash([]);
+          var lab='Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+(right||below?' — cut on the dashed line; the 1/8\" past it repeats on the next page, so lay it over the match and tape':' — lay the pages over their 1/8\" overlaps and tape');
           if(pv){previews.push(sheet(t,m,m,tw,th,lab));count++;continue;}
           if(count) pdf.addPage([pw,ph],land?'landscape':'portrait');
           pdf.addImage(t.toDataURL('image/jpeg',q),'JPEG',m,m,tw,th);
@@ -2760,7 +2769,7 @@ function printPane(t){
   h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend'])+'</div>';
   /* 6 · file */
   var auto=ui.pv&&ui.pv.out&&ui.pv.out.name?ui.pv.out.name.replace(/\.pdf$/i,''):'';
-  h+='<div class="sec"><b>File</b><div class="row"><label class="flab" for="p-file">File name</label><input class="inp" id="p-file" data-popt="file" dir="auto" value="'+esc(o.file||'')+'" placeholder="'+esc(auto)+'"><span class="flab">.pdf</span></div></div>';
+  h+='<div class="sec file-sec"><b>File</b><div class="row"><label class="flab" for="p-file">File name</label><input class="inp" id="p-file" data-popt="file" dir="auto" value="'+esc(o.file||'')+'" placeholder="'+esc(auto)+'"><span class="flab">.pdf</span></div></div>';
   return h;
 }
 var HEB=/[֐-׿]/,STRONG=/[A-Za-zÀ-ɏ֐-׿]/;
