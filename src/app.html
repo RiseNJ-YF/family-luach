@@ -423,7 +423,7 @@ textarea.inp{min-height:70px;resize:vertical}
 .pr-opts .psub{font-size:12px;font-weight:600;color:var(--ink-2);margin-top:6px}
 .pr-opts .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:3px 8px;margin-top:3px;padding-inline-start:2px}
 .pr-opts .pgrid .full{grid-column:1/-1}
-.pr-opts .sec.file-sec{column-span:all;margin-top:0}
+.pr-opts .row.pfile{margin-top:2px;flex-wrap:nowrap}
 .pick{position:relative}
 .pick-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:start;cursor:pointer;color:var(--ink)}
 .pick-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pick-btn i{font-style:normal;color:var(--ink-3);font-size:11px}
@@ -2763,10 +2763,10 @@ function printPane(t){
   h+='<div class="row">'+pChk(o,na,'hq','High quality (print shop, bigger file)')+'</div>'+naNote(na,['split','hq'])+'</div>';
   /* 5 · heading */
   h+='<div class="sec"><b>Heading</b><div class="row"><label class="flab" for="p-title">Title</label><input class="inp" id="p-title" data-popt="title" dir="auto" value="'+esc(o.title)+'" placeholder="'+esc(data.meta.familyName)+'" style="max-width:300px"></div>';
-  h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend'])+'</div>';
-  /* 6 · file */
+  h+='<div class="row"><span class="flab">Show</span>'+pChk(o,na,'date')+pChk(o,na,'foot')+pChk(o,na,'legend')+'</div>'+naNote(na,['date','foot','legend']);
+  /* the file name, under Title: its label on its own line so the box gets the column's width */
   var auto=ui.pv&&ui.pv.out&&ui.pv.out.name?ui.pv.out.name.replace(/\.pdf$/i,''):'';
-  h+='<div class="sec file-sec"><b>File</b><div class="row"><label class="flab" for="p-file">File name</label><input class="inp" id="p-file" data-popt="file" dir="auto" value="'+esc(o.file||'')+'" placeholder="'+esc(auto)+'"><span class="flab">.pdf</span></div></div>';
+  h+='<div class="row"><label class="flab" for="p-file">File name</label></div><div class="row pfile"><input class="inp" id="p-file" data-popt="file" dir="auto" value="'+esc(o.file||'')+'" placeholder="'+esc(auto)+'"><span class="flab">.pdf</span></div></div>';
   return h;
 }
 var HEB=/[֐-׿]/,STRONG=/[A-Za-zÀ-ɏ֐-׿]/;
