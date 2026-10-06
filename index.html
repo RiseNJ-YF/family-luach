@@ -304,6 +304,8 @@ button:disabled{cursor:default;opacity:.6}
 .dh .rel{margin:6px 0 0;font-size:14px;color:var(--ink-2)}
 .dbody{flex:1;overflow:auto;padding:16px 22px 24px;display:flex;flex-direction:column;gap:22px}
 .dfoot{border-top:1px solid var(--line);padding:12px 22px;display:flex;flex-wrap:wrap;gap:8px}
+.dh:has(+.dact){border-bottom:0;padding-bottom:10px}
+.dact{border-bottom:1px solid var(--line);padding:0 22px 14px;display:flex;flex-wrap:wrap;gap:8px}
 .dsec h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
 .facts{display:grid;gap:0;border-top:1px solid var(--line)}
 .fact{display:grid;grid-template-columns:118px minmax(0,1fr);gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}
@@ -2005,7 +2007,7 @@ function drawerView(p){
   h+='<header class="dh"><div><h2>'+nameHTML(p,true)+'</h2>';
   if(hn) h+='<p class="dheb">'+esc(fullName(p))+'</p>';
   if(parNames.length) h+='<p class="rel">'+esc(childWord(p)+' of ')+parNames.join(' & ')+'</p>';
-  h+='</div><button class="icon-btn" data-act="drawer-close" aria-label="Close">×</button></header><div class="dbody">';
+  h+='</div><button class="icon-btn" data-act="drawer-close" aria-label="Close">×</button></header><!--actions--><div class="dbody">';
   h+='<section class="dsec"><h4>Dates</h4><div class="facts">';
   if(p.birth){
     h+='<div class="fact"><div class="fl">Born</div><div class="fv">'+dateBlock(p.birth,p.birthSunset,p.birthNoYear)+(noAge(p)&&(p.deceased||ageAt(p,TODAY)==null)?'<span class="alt">Age hidden in PDFs</span>':'')+'</div></div>';
@@ -2063,22 +2065,23 @@ function drawerView(p){
     if(p.email) h+='<div class="fact"><div class="fl">Email</div><div class="fv copyable">'+esc(p.email)+'</div></div>';
     h+='</div>'+(p.notes?'<p class="dnote" style="margin-top:10px">'+esc(p.notes)+'</p>':'')+'</section>';
   }
-  h+='</div><footer class="dfoot">';
-  h+='<button class="btn sm" data-act="show-tree" data-pid="'+esc(p.id)+'">Show in family tree</button>';
-  if(kidsOf(p.id).length||spousesOf(p.id).length) h+='<button class="btn sm" data-act="tree-here" data-pid="'+esc(p.id)+'" title="Only this person, their spouse and their descendants — handy for printing one branch">Start tree from here</button>';
+  h+='</div>';
+  /* the buttons, under the name at the top: Edit first */
+  var a='';
+  if(editable()) a+='<button class="btn sm primary" data-act="edit" data-pid="'+esc(p.id)+'">Edit</button>';
+  a+='<button class="btn sm" data-act="show-tree" data-pid="'+esc(p.id)+'">Show in family tree</button>';
+  if(kidsOf(p.id).length||spousesOf(p.id).length) a+='<button class="btn sm" data-act="tree-here" data-pid="'+esc(p.id)+'" title="Only this person, their spouse and their descendants — handy for printing one branch">Start tree from here</button>';
   if(editable()){
-    h+='<button class="btn sm primary" data-act="edit" data-pid="'+esc(p.id)+'">Edit</button>';
-    if(sp.length<=1) h+='<button class="btn sm" data-act="add-rel" data-r="child" data-pid="'+esc(p.id)+'"'+(sp[0]?' data-sp="'+esc(sp[0].pid)+'"':'')+'>Add child</button>';
-    h+='<button class="btn sm" data-act="add-rel" data-r="spouse" data-pid="'+esc(p.id)+'">'+(sp.length?'Add another marriage':'Add spouse')+'</button>';
-    h+='<button class="btn sm" data-act="add-rel" data-r="sibling" data-pid="'+esc(p.id)+'">Add brother or sister</button>';
+    if(sp.length<=1) a+='<button class="btn sm" data-act="add-rel" data-r="child" data-pid="'+esc(p.id)+'"'+(sp[0]?' data-sp="'+esc(sp[0].pid)+'"':'')+'>Add child</button>';
+    a+='<button class="btn sm" data-act="add-rel" data-r="spouse" data-pid="'+esc(p.id)+'">'+(sp.length?'Add another marriage':'Add spouse')+'</button>';
+    a+='<button class="btn sm" data-act="add-rel" data-r="sibling" data-pid="'+esc(p.id)+'">Add brother or sister</button>';
     /* a brother or sister shares a parent, so with no parent entered yet, that comes first */
     var ask=drawer&&drawer.sibAsk?' data-then="sibling"':'';
-    if(ask) h+='<p class="note" style="flex-basis:100%;margin:2px 0 0">To add a brother or sister, first add a father or mother for <bdi>'+esc(primaryText(p))+'</bdi>. The form for the brother or sister opens right after.</p>';
-    if(!pr.father) h+='<button class="btn sm'+(ask?' primary':'')+'" data-act="add-rel" data-r="father" data-pid="'+esc(p.id)+'"'+ask+'>Add father</button>';
-    if(!pr.mother) h+='<button class="btn sm'+(ask?' primary':'')+'" data-act="add-rel" data-r="mother" data-pid="'+esc(p.id)+'"'+ask+'>Add mother</button>';
+    if(ask) a+='<p class="note" style="flex-basis:100%;margin:2px 0 0">To add a brother or sister, first add a father or mother for <bdi>'+esc(primaryText(p))+'</bdi>. The form for the brother or sister opens right after.</p>';
+    if(!pr.father) a+='<button class="btn sm'+(ask?' primary':'')+'" data-act="add-rel" data-r="father" data-pid="'+esc(p.id)+'"'+ask+'>Add father</button>';
+    if(!pr.mother) a+='<button class="btn sm'+(ask?' primary':'')+'" data-act="add-rel" data-r="mother" data-pid="'+esc(p.id)+'"'+ask+'>Add mother</button>';
   }
-  h+='</footer>';
-  return h;
+  return h.replace('<!--actions-->','<div class="dact">'+a+'</div>');
 }
 function ageNote(p){if(p.deceased) return '';var a=ageAt(p,TODAY);return a!=null?String(a):'';}
 
