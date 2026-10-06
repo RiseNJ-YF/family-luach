@@ -1158,7 +1158,8 @@ function tcard(p,isRoot,placed,pdf,ghost,note){
     h+='<span class="tn">'+esc(p.first||'Unnamed')+(p.deceased?' <span class="zl">ז״ל</span>':'')+'</span>';
     if(p.last||p.maiden) h+='<span class="tl">'+esc([p.last,p.maiden?'('+p.maiden+')':''].filter(Boolean).join(' '))+'</span>';
   }
-  if(po&&po.bday&&po.heb&&!p.deceased&&b&&!p.birthNoYear) h+='<span class="th"><bdi dir="rtl" lang="he">'+esc(fmtHe(hebOf(p.birth,p.birthSunset)))+'</bdi></span>';
+  /* the Hebrew birthday, on screen and in the PDF (a PDF leaves out the year when age is hidden) */
+  if((!po||(po.bday&&po.heb))&&!hd&&!p.deceased&&b&&!p.birthNoYear) h+='<span class="th"><bdi dir="rtl" lang="he">'+esc(fmtHe(hebOf(p.birth,p.birthSunset),!(pdf&&noAge(p))))+'</bdi></span>';
   if(dates&&(!po||(po.bday&&po.greg))) h+='<span class="td num">'+esc(dates)+(hd?'<bdi class="he" dir="rtl" lang="he">'+esc(hd)+'</bdi>':'')+'</span>';
   if(p.deceased&&d&&(!po||po.yz)) h+='<span class="tyz"><bdi dir="rtl" lang="he">יארצייט '+esc(fmtHe(hebOf(p.death,p.deathSunset),false))+'</bdi></span>';
   if(ghost){h+='<span class="tk">⚭ married to '+gsp.map(function(n){return '<bdi>'+esc(n)+'</bdi>';}).join(' & ')+' · see there</span></button></div>';return h;}
