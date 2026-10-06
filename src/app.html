@@ -2578,10 +2578,11 @@ function makePdf(opts){
     var dpi=o&&o.hq?300:150,pv=!!opts.preview;
     function scaleFor(pg,inchesWide){var w=pg.offsetWidth,h=pg.offsetHeight;if(pv) return Math.min(1.25,2600/Math.max(w,h));var sc=Math.max(2,inchesWide*dpi/w);return Math.min(sc,15000/Math.max(w,h),Math.sqrt(180e6/(w*h)));}
     /* a preview picture of one sheet: the paper's shape, with the content where the PDF puts it */
-    function sheet(src,x,y,w,h,label){
+    function sheet(src,x,y,w,h,label,marks){
       var PW=900,k=PW/pw,c=document.createElement('canvas');c.width=PW;c.height=Math.round(ph*k);var g=c.getContext('2d');
       g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(src,x*k,y*k,w*k,h*k);
-      if(label){g.strokeStyle='#D2D2D2';g.lineWidth=1;g.strokeRect(x*k,y*k,w*k,h*k);g.fillStyle='#999';g.font='9px sans-serif';g.fillText(label,x*k,c.height-8);}
+      if(marks&&marks.length){g.strokeStyle='#333';g.lineWidth=Math.max(1,0.5*k);g.beginPath();marks.forEach(function(s){g.moveTo(s[0]*k,s[1]*k);g.lineTo(s[2]*k,s[3]*k);});g.stroke();}
+      if(label){g.fillStyle='#999';g.font='9px sans-serif';g.fillText(label,(x+30)*k,c.height-8);}
       return c.toDataURL('image/jpeg',.85);
     }
     function thumb(cv){var k=Math.min(1,1400/cv.width),t=document.createElement('canvas');t.width=Math.max(1,Math.round(cv.width*k));t.height=Math.max(1,Math.round(cv.height*k));t.getContext('2d').drawImage(cv,0,0,t.width,t.height);return t.toDataURL('image/jpeg',.85);}
@@ -2596,18 +2597,21 @@ function makePdf(opts){
         for(var r=0;r<rows;r++) for(var c=0;c<split;c++){
           var x0=c*sx,y0=r*sy,wpx=Math.min(tpw,cv.width-x0),hpx=Math.min(tph,cv.height-y0),t=document.createElement('canvas');t.width=Math.round(tpw);t.height=Math.round(tph);
           var g=t.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,t.width,t.height);if(wpx>0&&hpx>0) g.drawImage(cv,x0,y0,wpx,hpx,0,0,wpx,hpx);
-          /* dashed cut lines where the overlap with the next page begins */
-          var right=c<split-1,below=r<rows-1,lw=Math.max(1,0.6/ptPx);
-          g.strokeStyle='#8A8A8A';g.lineWidth=lw;g.setLineDash([4/ptPx,3/ptPx]);g.beginPath();
-          if(right){g.moveTo(sx,0);g.lineTo(sx,t.height);}
-          if(below){g.moveTo(0,sy);g.lineTo(t.width,sy);}
-          g.stroke();g.setLineDash([]);
-          var lab='Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+(right||below?' — cut on the dashed line; the 1/8\" past it repeats on the next page, so lay it over the match and tape':' — lay the pages over their 1/8\" overlaps and tape');
-          if(pv){previews.push(sheet(t,m,m,tw,th,lab));count++;continue;}
+          /* Marks only in the white margin, never on the picture:
+             corner marks where the picture ends on a side that joins the next page (trim the margin there), and
+             crosses 1/8" in on a side the previous page joins (lay that page's trimmed edge on them). */
+          var right=c<split-1,below=r<rows-1,left=c>0,above=r>0,gp=3,L=14,X=12,mk=[];
+          var vt=function(x){mk.push([x,m-gp,x,m-gp-L],[x,m+th+gp,x,m+th+gp+L]);};
+          var ht=function(y){mk.push([m-gp,y,m-gp-L,y],[m+tw+gp,y,m+tw+gp+L,y]);};
+          var vx=function(x){[m-gp-X/2,m+th+gp+X/2].forEach(function(y){mk.push([x,y-X/2,x,y+X/2],[x-X/2,y,x+X/2,y]);});};
+          var hx=function(y){[m-gp-X/2,m+tw+gp+X/2].forEach(function(x){mk.push([x,y-X/2,x,y+X/2],[x-X/2,y,x+X/2,y]);});};
+          if(right) vt(m+tw);if(below) ht(m+th);if(left) vx(m+ov);if(above) hx(m+ov);
+          var lab='Row '+(r+1)+' of '+rows+' · column '+(c+1)+' of '+split+(right||below?' — trim the '+(right&&below?'right and bottom margins':right?'right margin':'bottom margin')+' at the corner marks, then lay that edge on the crosses on the next page and tape':' — the other pages lay their trimmed edges on the crosses of this page');
+          if(pv){previews.push(sheet(t,m,m,tw,th,lab,mk));count++;continue;}
           if(count) pdf.addPage([pw,ph],land?'landscape':'portrait');
           pdf.addImage(t.toDataURL('image/jpeg',q),'JPEG',m,m,tw,th);
-          pdf.setDrawColor(210);pdf.setLineWidth(.5);pdf.rect(m,m,tw,th);
-          pdf.setFontSize(7);pdf.setTextColor(150);pdf.text(lab,m,ph-m/2);
+          pdf.setDrawColor(51);pdf.setLineWidth(.5);mk.forEach(function(s){pdf.line(s[0],s[1],s[2],s[3]);});
+          pdf.setFontSize(7);pdf.setTextColor(150);pdf.text(lab,m+30,ph-m/2);
           count++;
         }
       });
