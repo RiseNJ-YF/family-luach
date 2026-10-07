@@ -100,7 +100,6 @@ button:disabled{cursor:default;opacity:.6}
 .chip[aria-pressed="false"]{opacity:.62}
 .chip[aria-pressed="false"] .dot{background:transparent;box-shadow:inset 0 0 0 1.5px var(--c)}
 .k-birthday{--c:var(--c-birthday)}.k-hbirthday{--c:var(--c-hbirthday)}.k-anniversary{--c:var(--c-anniversary)}.k-yahrzeit{--c:var(--c-yahrzeit)}.k-other{--c:var(--c-other)}.k-holiday{--c:var(--c-holiday)}.k-cal{--c:var(--ink-3)}
-.hmark{display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;border:1px solid currentColor;font-size:10px;font-weight:700;line-height:1;flex:none;font-family:var(--sans)}
 
 /* upcoming */
 .up-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:32px;align-items:start}
@@ -125,7 +124,6 @@ button:disabled{cursor:default;opacity:.6}
 .ubody{min-width:0;display:flex;gap:10px;align-items:flex-start}
 .ubar{width:3px;align-self:stretch;border-radius:2px;background:var(--c);flex:none}
 .utitle{font-weight:600;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
-.utitle .hmark{color:var(--c)}
 .usub{color:var(--ink-2);font-size:14px}
 .uwhen{font-size:13px;color:var(--ink-3);white-space:nowrap;text-align:right}
 .uwhen.soon{color:var(--accent);font-weight:700}
@@ -170,7 +168,6 @@ button:disabled{cursor:default;opacity:.6}
 .cd .s.mstart{color:var(--ink);font-weight:600}
 .cev{display:flex;flex-direction:column;gap:2px;width:100%;min-width:0}
 .ev{font-size:12px;line-height:1.25;padding:2px 5px;border-radius:4px;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;gap:4px;align-items:center}
-.ev .hmark{width:13px;height:13px;font-size:8px;color:var(--c)}
 .ev.holiday{background:transparent;color:var(--c-holiday);font-weight:600;padding-left:0}
 .ev-more{font-size:11px;color:var(--ink-3);padding-left:5px}
 .dots{display:none;gap:3px;flex-wrap:wrap}
@@ -860,7 +857,6 @@ function evSub(e,pdf){
   if(pdf&&originYear(e)) bits.push('<span style="white-space:nowrap">'+{birthday:'born ',anniversary:'married ',yahrzeit:'passed away ',other:'since '}[e.kind]+originHTML(e)+'</span>');
   return bits.join(' · ');
 }
-function hmark(e){return e.cal==='heb'&&e.kind!=='holiday'?'<span class="hmark" title="Hebrew-calendar date" aria-label="Hebrew-calendar date">א</span>':'';}
 
 /* ---------- UI state ---------- */
 var hash=(location.hash||'').replace('#','');
@@ -1056,7 +1052,7 @@ function urow(e,compact){
     var g=gFromAbs(e.abs),hh=H.fromAbs(e.abs);
     h+='<div class="udate"><b class="num">'+g.d+'</b><span class="wd">'+GMS[g.m-1]+' · '+WDS[dow(e.abs)]+'</span><span class="he" dir="rtl" lang="he">'+esc(fmtHe(hh,false))+'</span></div>';
   }
-  h+='<div class="ubody"><span class="ubar"></span><div><div class="utitle">'+hmark(e)+evTitle(e)+'</div><div class="usub">'+evSub(e)+'</div></div></div>';
+  h+='<div class="ubody"><span class="ubar"></span><div><div class="utitle">'+evTitle(e)+'</div><div class="usub">'+evSub(e)+'</div></div></div>';
   if(!compact) h+='<div class="uwhen'+(e.abs-TODAY<=7?' soon':'')+'">'+rel(e.abs)+'</div>';
   return h+'</li>';
 }
@@ -1090,7 +1086,7 @@ function viewUpcoming(){
   var couples=data.marriages.filter(function(m){var a=P(m.a),b=P(m.b);return a&&!m.divorced&&!a.deceased&&!(b&&b.deceased);}).length;
   var gens=0;data.people.forEach(function(p){if(!p.parents.some(function(x){return P(x);})){var c=genCounts(p.id).length+1;if(c>gens) gens=c;}});
   h+='<div class="block"><h4>The family</h4><div class="stats"><div class="stat"><b class="num">'+data.people.length+'</b><span>people</span></div><div class="stat"><b class="num">'+living+'</b><span>living</span></div><div class="stat"><b class="num">'+couples+'</b><span>married couples</span></div><div class="stat"><b class="num">'+gens+'</b><span>generations</span></div></div></div>';
-  h+='<div class="block"><h4>Reading the dates</h4><div class="legend"><div><span class="hmark" style="color:var(--ink-2)">א</span>Falls on the Hebrew date, so it moves each English year.</div><div class="note">Hebrew dates begin at sundown the evening before. People born or married after sunset are marked in their details.</div></div></div>';
+  h+='<div class="block"><h4>Reading the dates</h4><div class="legend"><div class="note">Hebrew dates begin at sundown the evening before. People born or married after sunset are marked in their details.</div></div></div>';
   h+='</aside></div>';
   return h;
 }
@@ -1142,7 +1138,7 @@ function viewCalendar(){
     h+='<span class="cd">'+prim+'<span class="'+secCls+'"'+(heb?'':' dir="rtl" lang="he"')+'>'+esc(sec)+'</span></span>';
     if(list.length){
       h+='<span class="cev">';
-      list.slice(0,3).forEach(function(e){h+='<span class="ev '+kindClass(e)+(e.kind==='holiday'?' holiday':'')+'">'+hmark(e)+evShort(e)+'</span>';});
+      list.slice(0,3).forEach(function(e){h+='<span class="ev '+kindClass(e)+(e.kind==='holiday'?' holiday':'')+'">'+evShort(e)+'</span>';});
       if(list.length>3) h+='<span class="ev-more">+'+(list.length-3)+' more</span>';
       h+='</span><span class="dots">'+list.slice(0,5).map(function(e){return '<i class="'+kindClass(e)+'"></i>';}).join('')+'</span>';
     }
@@ -2492,7 +2488,7 @@ function pxMonthGrid(width,cH,noLegend){
     var prim=heb?'<span class="he" dir="rtl" lang="he">'+esc(gem(hd.d))+'</span>':String(g.d);
     var sec=heb?(g.d===1||a===r.s?GMS[g.m-1]+' '+g.d:String(g.d)):'<span class="he" dir="rtl" lang="he">'+esc(hd.d===1?gem(1)+' '+hmName(hd.m,hd.y,true):gem(hd.d))+'</span>';
     h+='<div class="px-cell'+(out?' out':'')+'" style="min-height:'+cellH+'px"><div class="px-cn">'+prim+'<span class="h">'+sec+'</span></div>';
-    (by[a]||[]).forEach(function(e){h+='<div class="px-ev" style="'+(heb?'border-right-color:':'border-left-color:')+KHEX[kkey(e)]+'">'+evShort(e)+(e.cal==='heb'&&e.kind!=='holiday'&&!heb?' (א)':'')+'</div>';});
+    (by[a]||[]).forEach(function(e){h+='<div class="px-ev" style="'+(heb?'border-right-color:':'border-left-color:')+KHEX[kkey(e)]+'">'+evShort(e)+'</div>';});
     h+='</div>';
   }
   return h+'</div>'+(noLegend||PRN&&!PRN.legend?'':pxLegend());
@@ -3367,7 +3363,7 @@ function coupleText(e){
   return ps.map(firstName).join(' & ')+(ps[0].last?' '+ps[0].last:'');
 }
 function wallSegs(e){
-  var p=P(e.pids[0]),segs=e.cal==='heb'&&ui.calMode!=='heb'?[{t:'א ',c:'#6A4899',b:true}]:[];
+  var p=P(e.pids[0]),segs=[];
   switch(e.kind){
     case 'birthday':segs=segs.concat(nameSegs(p));if(PRN&&PRN.en&&hebName(p)) segs.push({t:' ('+fullName(p)+')'});if(e.n!=null&&!noAge(p)) segs.push({t:' · '+e.n});break;
     case 'anniversary':segs.push({t:coupleText(e),b:true},{t:' · '+ord(e.n)});break;
@@ -3414,7 +3410,7 @@ function makeWall(o){
       var w=T.width([{t:k[1]}],ls);lx-=w;T.draw([{t:k[1],c:INK2}],lx,ly,ls,'left');
       lx-=ls*0.35+ls*0.9;fill(KHEX[k[0]]);pdf.rect(lx,ly-ls*0.8,ls*0.9,ls*0.9,'F');lx-=ls*1.6;
     });
-    var note=(o.legend?(heb?[]:[{t:'א',c:'#6A4899',b:true},{t:' = kept by the Hebrew date · ',c:INK3}]).concat([{t:'numbers are the age or year being marked',c:INK3}]):[]).concat(o.date?[{t:(o.legend?' · ':'')+'Printed '+fmtG(TODAY),c:INK3}]:[]);
+    var note=(o.legend?[{t:'numbers are the age or year being marked',c:INK3}]:[]).concat(o.date?[{t:(o.legend?' · ':'')+'Printed '+fmtG(TODAY),c:INK3}]:[]);
     if(note.length) T.draw(note,W-M,M+headH*0.86,ls,'right');
     stroke(INK,2.2);pdf.line(M,M+headH,W-M,M+headH);
     /* months */
