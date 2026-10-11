@@ -210,7 +210,7 @@ button:disabled{cursor:default;opacity:.6}
 .tree3d{position:relative;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface);touch-action:none;min-height:320px}
 .tree3d canvas{display:block;width:100%;height:100%;cursor:grab}.tree3d canvas:active{cursor:grabbing}
 .tree-bar.t3d-on label[for=tree-layout],.tree-bar.t3d-on label[for=tree-style]{display:none}
-.t3d-kind{width:auto}
+
 .tree-wrap.panning{cursor:grabbing}
 .tree-wrap{cursor:grab;touch-action:none;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:28px 16px 36px;background-image:radial-gradient(color-mix(in srgb,var(--ink) 10%,transparent) 1px,transparent 1px);background-size:22px 22px}
 .ftree{position:relative;margin-inline:auto}
@@ -863,7 +863,7 @@ var ui={
   calMode:lsGet('fl-cal','heb')==='greg'?'greg':'heb',calSpan:lsGet('fl-calspan','month'),
   gCur:(function(){var g=gFromAbs(TODAY);return {y:g.y,m:g.m};})(),
   hCur:(function(){var h=H.fromAbs(TODAY);return {y:h.y,m:h.m};})(),
-  sel:TODAY,treeRoot:null,treeStyle:lsGet('fl-tstyle','classic'),tree3d:lsGet('fl-3d',''),calWho:lsGet('fl-calwho',''),treeLayout:lsGet('fl-tlayout','compact'),treeOpen:{},zoom:1,zoomFit:true,orient:lsGet('fl-orient','landscape'),q:'',sort:lsGet('fl-sort','name'),horizon:90,preview:false,panel:null,clearAsk:false
+  sel:TODAY,treeRoot:null,treeStyle:lsGet('fl-tstyle','classic'),tree3d:lsGet('fl-3d','')?'floors':'',calWho:lsGet('fl-calwho',''),treeLayout:lsGet('fl-tlayout','compact'),treeOpen:{},zoom:1,zoomFit:true,orient:lsGet('fl-orient','landscape'),q:'',sort:lsGet('fl-sort','name'),horizon:90,preview:false,panel:null,clearAsk:false
 };
 var canWrite=false,artNs=null,saving=false,exporting=false;
 function editable(){return canWrite&&!ui.preview;}
@@ -2002,7 +2002,7 @@ function treeMarkup(root,pdf){
   });
   return '<div class="ftree" style="width:'+Math.ceil(L.w)+'px;height:'+Math.ceil(L.h+TPAD+4)+'px">'+h+'</div>';
 }
-/* ---------- Family tree in 3D: "Floors" (each generation on its own glass floor) or "Constellation" ----------
+/* ---------- Family tree in 3D: each generation on its own glass floor ----------
    The 3D library is only downloaded the first time someone switches to 3D. The scene and the camera are kept
    while the app redraws, and only rebuilt when the family, the starting person or the direction changes.
    Drag to turn, scroll or pinch to zoom, right-drag or two fingers to move; a tap on someone opens them. */
@@ -2050,67 +2050,35 @@ function card3dTex(p){
   g.fillStyle='#46515E';g.font='400 26px Assistant,sans-serif';g.fillText(yrs,180,164);
   var t=new THREE.CanvasTexture(c);t.anisotropy=4;return t;
 }
-/* a name under a light in the constellation */
-function label3dTex(p){
-  var c=document.createElement('canvas');c.width=320;c.height=96;var g=c.getContext('2d');g.textAlign='center';
-  if(p.hebFirst){g.direction='rtl';g.fillStyle='#E9EEF8';fit3(g,p.hebFirst,700,'"Frank Ruhl Libre",serif',310,38);g.fillText(p.hebFirst,160,40);g.direction='ltr';}
-  g.fillStyle=p.hebFirst?'#9FB0CC':'#E9EEF8';fit3(g,p.first||'',p.hebFirst?400:700,'Assistant,sans-serif',310,p.hebFirst?27:34);g.fillText(p.first||'',160,p.hebFirst?80:56);
-  return new THREE.CanvasTexture(c);
-}
-function build3d(kind){
-  var T=THREE,stars=kind==='stars',S=new T.Scene(),picks=[],L=tree3dLayout(tree3dUnits(currentRoot()));
-  S.background=new T.Color(stars?0x0B1020:0xF4F1EA);
-  var CW=L.CW,CH=CW*200/360,H=stars?3.1:3.6,box=new T.Box3();
+function build3d(){
+  var T=THREE,S=new T.Scene(),picks=[],L=tree3dLayout(tree3dUnits(currentRoot()));
+  S.background=new T.Color(0xF4F1EA);
+  var CW=L.CW,CH=CW*200/360,H=3.6,box=new T.Box3(),gens={};
   var line=function(pts,col){var g=new T.BufferGeometry().setFromPoints(pts.map(function(q){return new T.Vector3(q[0],q[1],q[2]);}));S.add(new T.Line(g,new T.LineBasicMaterial({color:col})));};
-  if(stars){
-    S.add(new T.AmbientLight(0x8899bb,0.6));var lt=new T.PointLight(0xffffff,1.2);lt.position.set(0,8,12);S.add(lt);
-  }
-  var gens={};
   L.all.forEach(function(v){
-    var y=-v.g*H,z=stars?Math.sin(v.x*0.8)*1.4:0;v.y=y;v.z=z;
+    var y=-v.g*H;
     v.cards.forEach(function(c){
-      var p=P(c.id),pos=new T.Vector3(c.x,y,z);box.expandByPoint(pos);
+      var pos=new T.Vector3(c.x,y,0);box.expandByPoint(pos);
       var gr=gens[v.g]=gens[v.g]||[1e9,-1e9];gr[0]=Math.min(gr[0],c.x);gr[1]=Math.max(gr[1],c.x);
-      if(stars){
-        var col=p.gender==='f'?0xE08AA6:p.gender==='m'?0x6FA3E0:0xB8C0CC;
-        var ball=new T.Mesh(new T.SphereGeometry(0.28,32,16),new T.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:p.deceased?0.25:0.55,roughness:0.4,transparent:p.deceased,opacity:p.deceased?0.75:1}));
-        ball.position.copy(pos);ball.userData.pid=c.id;S.add(ball);picks.push(ball);
-        var glow=new T.Mesh(new T.SphereGeometry(0.45,24,12),new T.MeshBasicMaterial({color:col,transparent:true,opacity:0.16,depthWrite:false}));glow.position.copy(pos);S.add(glow);
-        var lb=new T.Sprite(new T.SpriteMaterial({map:label3dTex(p),transparent:true,depthWrite:false}));lb.scale.set(2.1,0.63,1);lb.position.set(c.x,y-0.78,z);lb.userData.pid=c.id;S.add(lb);picks.push(lb);
-      } else {
-        var sp=new T.Sprite(new T.SpriteMaterial({map:card3dTex(p),transparent:true}));sp.scale.set(CW,CH,1);sp.position.copy(pos);sp.userData.pid=c.id;sp.renderOrder=2;S.add(sp);picks.push(sp);
-      }
+      var sp=new T.Sprite(new T.SpriteMaterial({map:card3dTex(P(c.id)),transparent:true}));sp.scale.set(CW,CH,1);sp.position.copy(pos);sp.userData.pid=c.id;sp.renderOrder=2;S.add(sp);picks.push(sp);
     });
     /* a gold ring between each husband and wife */
     for(var i=1;i<v.cards.length;i++){
-      var mx=(v.cards[i-1].x+v.cards[i].x)/2;
-      var ring=new T.Mesh(new T.TorusGeometry(stars?0.17:0.09,stars?0.035:0.025,10,32),stars?new T.MeshStandardMaterial({color:0xE0B34C,emissive:0x8a6a1a,metalness:0.6,roughness:0.3}):new T.MeshBasicMaterial({color:0xA2741A}));
-      ring.position.set(mx,y,z+0.02);ring.renderOrder=3;S.add(ring);
-      if(stars) line([[v.cards[i-1].x,y,z],[v.cards[i].x,y,z]],0xC9A04A);
+      var ring=new T.Mesh(new T.TorusGeometry(0.09,0.025,10,32),new T.MeshBasicMaterial({color:0xA2741A}));
+      ring.position.set((v.cards[i-1].x+v.cards[i].x)/2,y,0.02);ring.renderOrder=3;S.add(ring);
     }
     /* a line to each child */
     var jx=v.cards.length>1?(v.cards[0].x+v.cards[1].x)/2:v.cards[0].x;
-    v.kids.forEach(function(k){
-      var yk=-k.g*H,kx=k.cards[0].x;
-      if(stars){var zk=Math.sin(k.x*0.8)*1.4;line([[jx,y-0.2,z],[kx,yk+0.3,zk]],0x5D7299);}
-      else line([[jx,y-CH/2,0],[jx,y-H/2,0],[kx,y-H/2,0],[kx,yk+CH/2,0]],0x6B7568);
-    });
+    v.kids.forEach(function(k){var yk=-k.g*H,kx=k.cards[0].x;line([[jx,y-CH/2,0],[jx,y-H/2,0],[kx,y-H/2,0],[kx,yk+CH/2,0]],0x6B7568);});
   });
-  var c0=box.getCenter(new T.Vector3()),sz=box.getSize(new T.Vector3());
-  if(stars){
-    /* stars all around */
-    var st=[];for(var s=0;s<1400;s++){var r=40+Math.random()*60,th=Math.random()*Math.PI*2,ph=Math.acos(2*Math.random()-1);st.push(c0.x+r*Math.sin(ph)*Math.cos(th),c0.y+r*Math.cos(ph),c0.z+r*Math.sin(ph)*Math.sin(th));}
-    var sg=new T.BufferGeometry();sg.setAttribute('position',new T.Float32BufferAttribute(st,3));S.add(new T.Points(sg,new T.PointsMaterial({color:0xffffff,size:0.18})));
-  } else {
-    /* a glass floor under each generation */
-    Object.keys(gens).forEach(function(g){
-      var gr=gens[g],w=gr[1]-gr[0]+CW+1.4,y=-g*H-CH/2-0.12;
-      var fl=new T.Mesh(new T.BoxGeometry(w,0.05,2.6),new T.MeshBasicMaterial({color:0xDCE6EE,transparent:true,opacity:0.5,depthWrite:false}));
-      fl.position.set((gr[0]+gr[1])/2,y,0);fl.renderOrder=1;S.add(fl);
-      var ed=new T.LineSegments(new T.EdgesGeometry(fl.geometry),new T.LineBasicMaterial({color:0xA9BBC9}));ed.position.copy(fl.position);S.add(ed);
-    });
-  }
-  return {scene:S,picks:picks,center:c0,size:sz,stars:stars};
+  /* a glass floor under each generation */
+  Object.keys(gens).forEach(function(g){
+    var gr=gens[g],w=gr[1]-gr[0]+CW+1.4,y=-g*H-CH/2-0.12;
+    var fl=new T.Mesh(new T.BoxGeometry(w,0.05,2.6),new T.MeshBasicMaterial({color:0xDCE6EE,transparent:true,opacity:0.5,depthWrite:false}));
+    fl.position.set((gr[0]+gr[1])/2,y,0);fl.renderOrder=1;S.add(fl);
+    var ed=new T.LineSegments(new T.EdgesGeometry(fl.geometry),new T.LineBasicMaterial({color:0xA9BBC9}));ed.position.copy(fl.position);S.add(ed);
+  });
+  return {scene:S,picks:picks,center:box.getCenter(new T.Vector3()),size:box.getSize(new T.Vector3())};
 }
 function dispose3d(S){S.traverse(function(o){if(o.geometry) o.geometry.dispose();if(o.material){if(o.material.map) o.material.map.dispose();o.material.dispose();}});}
 /* the whole family in view, seen from a little above (floors) or a little to the side (constellation) */
@@ -2118,8 +2086,7 @@ function fit3d(){
   if(!T3||!T3.built) return;
   var b=T3.built,cam=T3.camera,el=T3.renderer.domElement,asp=(el.clientWidth||900)/(el.clientHeight||560);
   var t=Math.tan(cam.fov*Math.PI/360),w=Math.max(b.size.x,4)+3,h=Math.max(b.size.y,3)+3,d=Math.max(w/(2*t*asp),h/(2*t))*1.05;
-  if(b.stars) cam.position.set(b.center.x+d*0.22,b.center.y+d*0.08,b.center.z+d);
-  else cam.position.set(b.center.x+d*0.18,b.center.y+d*0.42,b.center.z+d*0.92);
+  cam.position.set(b.center.x+d*0.18,b.center.y+d*0.42,b.center.z+d*0.92);
   cam.near=0.1;cam.far=d*6+200;cam.updateProjectionMatrix();
   T3.controls.target.copy(b.center);T3.controls.update();
 }
@@ -2151,7 +2118,7 @@ function mount3d(){
       });
     }
     var key=JSON.stringify([ui.tree3d,currentRoot(),ui.calMode,dataVer]);
-    if(T3.key!==key){if(T3.built) dispose3d(T3.built.scene);T3.built=build3d(ui.tree3d);T3.key=key;T3.fresh=true;}
+    if(T3.key!==key){if(T3.built) dispose3d(T3.built.scene);T3.built=build3d();T3.key=key;T3.fresh=true;}
     if(T3.renderer.domElement.parentNode!==host){host.innerHTML='';host.appendChild(T3.renderer.domElement);}
     size3d();
     if(T3.fresh){T3.fresh=false;fit3d();}
@@ -2175,7 +2142,7 @@ function viewTree(){
   h+='<div class="seg m-only" role="group" aria-label="Direction"><button data-act="calmode" data-m="greg" aria-pressed="'+(ui.calMode!=='heb')+'">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+(ui.calMode==='heb')+'">Hebrew</button></div>';
   h+='</div><div class="cal-nav">';
   h+='<div class="seg" role="group" aria-label="View"><button data-act="t3d" data-v="" aria-pressed="'+!ui.tree3d+'">2D</button><button data-act="t3d" data-v="on" aria-pressed="'+!!ui.tree3d+'">3D</button></div>';
-  if(ui.tree3d) h+='<select class="sel t3d-kind" data-act-change="t3d-kind" aria-label="3D view"><option value="floors"'+(ui.tree3d==='floors'?' selected':'')+'>Floors</option><option value="stars"'+(ui.tree3d==='stars'?' selected':'')+'>Constellation</option></select><button class="btn sm" data-act="t3d-reset">Reset view</button>';
+  if(ui.tree3d) h+='<button class="btn sm" data-act="t3d-reset">Reset view</button>';
   if(par.length) h+='<button class="btn sm d-only" data-act="root" data-pid="'+esc(par[0])+'">↑ Up a generation</button>';
   h+='<div class="seg d-only" role="group" aria-label="Direction"><button data-act="calmode" data-m="greg" aria-pressed="'+(ui.calMode!=='heb')+'" title="Oldest on the left">English</button><button data-act="calmode" data-m="heb" aria-pressed="'+(ui.calMode==='heb')+'" title="Oldest on the right">Hebrew</button></div>';
   if(!ui.tree3d) h+='<button class="btn sm" data-act="zoom" data-z="-1" aria-label="Zoom out">−</button><span class="btn sm num zoom-pct" id="zoom-pct">'+Math.round(ui.zoom*100)+'%</span><button class="btn sm" data-act="zoom" data-z="1" aria-label="Zoom in">+</button><button class="btn sm" data-act="zoom" data-z="0">Fit</button>';
@@ -4070,7 +4037,7 @@ document.addEventListener('click',function(e){
     case 'pdf-back':closePrev();ui.pdfMenu=true;render();break;
     case 'pdf-close':closePrev();render();break;
     case 'calmode':ui.calMode=t.dataset.m;lsSet('fl-cal',ui.calMode);gotoMonthOf(ui.sel);if(ui.view==='tree') ui.zoomFit=true;render();break;
-    case 't3d':ui.tree3d=t.dataset.v?lsGet('fl-3dkind','floors'):'';lsSet('fl-3d',ui.tree3d);render();break;
+    case 't3d':ui.tree3d=t.dataset.v?'floors':'';lsSet('fl-3d',ui.tree3d);render();break;
     case 't3d-reset':fit3d();draw3d();break;
     case 'filt-toggle':ui.filtOpen=!ui.filtOpen;render();break;
     case 'tree-opts':ui.treeOpts=!ui.treeOpts;render();break;
@@ -4223,7 +4190,6 @@ document.addEventListener('change',function(e){
   if(a==='wall-size'){lsSet('fl-wall',t.value);render();}
   if(a==='tree-switch'){switchTree(t.value);return;}
   if(a==='acct-branch'){acctBranch(+t.dataset.i,t.value);return;}
-  if(a==='t3d-kind'){ui.tree3d=t.value;lsSet('fl-3d',t.value);lsSet('fl-3dkind',t.value);render();}
   if(a==='tree-style'){ui.treeStyle=t.value;lsSet('fl-tstyle',t.value);ui.zoomFit=true;render();}
   if(a==='tree-layout'){ui.treeLayout=t.value;lsSet('fl-tlayout',t.value);ui.zoomFit=true;if(ui.popt&&ui.popt.tree&&!ui.areaSel){delete ui.popt.tree.area;savePopt();}render();}
   if(a==='sort'){ui.sort=t.value;lsSet('fl-sort',ui.sort);$('#people-grid').innerHTML=peopleCards();}
