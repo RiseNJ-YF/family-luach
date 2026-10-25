@@ -496,6 +496,20 @@ textarea.inp{min-height:70px;resize:vertical}
 .sec>b{display:block;font-size:15px;margin-bottom:2px}
 .sec.danger{border-color:color-mix(in srgb,#B3261E 30%,var(--line))}
 .dlg-pane .acct{padding:12px 2px}
+.sec .cnt{display:inline-block;min-width:20px;padding:0 6px;border-radius:999px;background:var(--surface-2);color:var(--ink-2);font-size:12px;text-align:center;margin-inline-start:4px}
+.plist{display:flex;flex-direction:column;margin-top:8px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.prow{border-top:1px solid var(--line)}.prow:first-child{border-top:0}.prow.open{background:var(--bg)}
+.pr-main{display:flex;align-items:center;gap:10px;padding:9px 12px}
+.pr-av{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);color:var(--ink-2);font-weight:700;font-size:14px}
+.pr-who{flex:1;min-width:0;display:flex;flex-direction:column}.pr-who b{font-size:15px}
+.pl-br{font-size:12.5px;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pr-panel{padding:4px 12px 12px 52px;display:flex;flex-direction:column;gap:8px}
+.pr-line{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px}.pr-panel .pr-line{margin-top:0}
+.pr-line .flab{min-width:64px}.pr-line .inp{width:auto;flex:1;min-width:160px;max-width:260px}.pr-line .sel{max-width:100%}
+.addf{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:10px;max-width:520px}
+.btn.danger-txt{color:#B3261E}
+.steps{margin:4px 0 12px;padding-inline-start:20px;color:var(--ink-2)}
+@media (max-width:640px){.pr-panel{padding-left:12px}.pr-line .flab{min-width:0;width:100%}}
 @media (max-width:720px){.dlg{padding:0}.dlg-box{border-radius:0;height:100%;width:100%}.dlg-main{flex-direction:column}.dlg-nav{width:auto;flex-direction:row;overflow-x:auto;border-inline-end:0;border-bottom:1px solid var(--line);padding:8px}.dlg-nav button{white-space:nowrap;padding:8px 12px}.dlg-nav button[aria-selected=true]{box-shadow:inset 0 -3px 0 var(--accent)}.dlg-pane{padding:16px}}
 .panel h4.subh{margin:18px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-3)}
 .pvw{position:fixed;inset:0;background:var(--scrim);z-index:55;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -984,13 +998,13 @@ function zoomAt(clientX,clientY,factor){
 }
 /* ---------- Settings: its own window, with a section for each kind of setting ---------- */
 function setTabs(){
-  var t=[['family','Family'],['share','Share']];
-  if(WEB&&web.me&&myRole()==='editor') t.push(['access',web.me.owner?'People & access':'Viewers & password']);
-  if(WEB&&web.me&&web.me.owner) t.push(['trees','Family trees'],['invites','Invites']);
+  var t=[['family','Family'],['share',WEB&&web.me&&myRole()==='editor'?'Sharing':'Share']];
+  if(WEB&&web.me&&web.me.owner) t.push(['trees','Family trees'],['invites','New tree invites']);
   t.push(['backup','Backup']);
   return t;
 }
 function settingsDialog(){
+  if(ui.setTab==='access') ui.setTab='share';
   var tabs=setTabs(),cur=tabs.some(function(x){return x[0]===ui.setTab;})?ui.setTab:'family';
   var h='<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dlg-t"><div class="dlg-box"><div class="dlg-head"><h2 id="dlg-t">Settings</h2><button class="btn sm ghost" data-act="panel" data-p="" aria-label="Close settings">Close ✕</button></div>';
   h+='<div class="dlg-main"><nav class="dlg-nav" role="tablist" aria-label="Settings sections">';
@@ -999,10 +1013,9 @@ function settingsDialog(){
 }
 function setPane(t){
   var h='';
-  if(t==='share') return '<h3>Share</h3>'+shareBody();
-  if(t==='access') return '<h3>'+(web.me.owner?'People & access':'Viewers & password')+'</h3><p class="lead">Who can sign in to this family tree, and what they can do.</p>'+accountsHTML();
+  if(t==='share') return WEB&&web.me&&myRole()==='editor'?sharingHTML():'<h3>Share</h3>'+shareBody();
   if(t==='trees') return '<h3>Family trees</h3>'+ownerTreesHTML();
-  if(t==='invites') return '<h3>Invites</h3>'+ownerInvitesHTML();
+  if(t==='invites') return '<h3>New tree invites</h3>'+ownerInvitesHTML();
   if(t==='backup'){
     h='<h3>Backup</h3><p class="lead">Keep a copy of all the family data, or load a copy saved earlier. This is also how you move data between the Claude version and the website.</p>';
     h+='<div class="sec"><b>Download a backup</b><p>Saves everyone, their dates and marriages as one data file.</p><div class="row"><button class="btn sm primary" data-act="export-data">Download data file</button></div></div>';
@@ -1022,7 +1035,7 @@ function setPane(t){
 function shareBody(){
   if(WEB){
     var url=location.origin+location.pathname;
-    return '<p class="lead">Send each person this address together with their username and password (add people under '+(web.me&&web.me.owner?'People & access':'Viewers & password')+').</p>'+
+    return '<p class="lead">Send each person this address together with their username and password.</p>'+
       '<div class="sec"><b>Site address</b><div class="row"><span class="copyable invite-link">'+esc(url)+'</span><button class="btn sm" data-act="copy-url">Copy address</button></div></div>'+
       '<div class="sec"><b>What viewers see</b><p>Viewers can look at everything (or only their branch); only editors see the edit controls.</p><div class="row"><button class="btn sm" data-act="preview">Preview what viewers see</button></div></div>';
   }
@@ -3610,7 +3623,7 @@ function runSetup(){
     if(!file||d.meta.example) d.meta.familyName=fam;
     return api('setup','POST',{name:name,password:pw,data:d});
   }).then(function(r){web.me=r.me;web.busy=false;web.msg='';return loadData();})
-    .then(function(){ui.panel='settings';render();toast('Your family site is set up. Add family members in Settings → People & access.');})
+    .then(function(){ui.panel='settings';render();toast('Your family site is set up. Let family members in under Settings → Sharing.');})
     .catch(function(e){web.busy=false;web.msg='';web.err=e.message||String(e);render();});
 }
 function webSave(){
@@ -3630,12 +3643,12 @@ function webSave(){
 }
 function acctDo(payload){
   web.busy=true;render();
-  api('users'+tq(),'POST',payload).then(function(r){accounts=r.users;web.busy=false;ui.acctErr='';ui.rmAsk=null;render();toast(r.message||'Done.');if(web.me.owner) loadOwner();},
+  api('users'+tq(),'POST',payload).then(function(r){accounts=r.users;web.busy=false;ui.acctErr='';ui.rmAsk=null;if(payload.action==='add'||payload.action==='grant') ui.addOpen=false;if(payload.action==='remove') ui.acctOpen=null;render();toast(r.message||'Done.');if(web.me.owner) loadOwner();},
     function(e){web.busy=false;ui.acctErr=netErr(e);render();});
 }
 function acctAdd(){var br=$('#ac-branch');acctDo({action:'add',name:$('#ac-user').value.trim(),password:$('#ac-pw').value,role:$('#ac-role').value,person:br&&$('#ac-role').value==='viewer'?br.value:''});}
 function acctGrant(){var br=$('#ag-branch');acctDo({action:'grant',name:$('#ag-user').value.trim(),role:$('#ag-role').value,person:br&&$('#ag-role').value==='viewer'?br.value:''});}
-function acctRole(i){var a=accounts[i];if(a) acctDo({action:'grant',name:a.name,role:a.role==='editor'?'viewer':'editor'});}
+function acctSetRole(i,r){var a=accounts[i];if(a&&a.role!==r) acctDo({action:'grant',name:a.name,role:r});}
 function branchSelectHTML(attrs,selected){
   var opts=data.people.slice().sort(function(x,y){return primaryText(x).localeCompare(primaryText(y));});
   return '<select class="sel" '+attrs+'><option value="">the whole tree</option>'+opts.map(function(p){return '<option value="'+esc(p.id)+'"'+(selected===p.id?' selected':'')+'>only the family of '+esc(primaryText(p))+'</option>';}).join('')+'</select>';
@@ -3669,9 +3682,10 @@ function ownerTreesHTML(){
 }
 function ownerInvitesHTML(){
   if(!WEB||!web.me||!web.me.owner) return '';
-  var h='<p class="lead">Each link can be used once. Whoever opens it names their family and becomes its editor — with a new username, or with their existing one (the new tree is added to their account). They fill in their family; you give other people access.</p>';
+  var h='<p class="lead">Invite someone to start their own family tree on this site. They open the link, name their family, and become that tree’s editor. To let people into <b>this</b> tree instead, use Sharing.</p>';
+  h+='<ol class="steps"><li>Create a link and send it to them.</li><li>They choose a username (or use the one they have) and name their family.</li><li>Each link works once.</li></ol>';
   h+='<div class="row" style="margin:0 0 6px">';
-  h+='<button class="btn sm primary" data-act="invite-new"'+(web.busy?' disabled':'')+'>Create an invite link</button></div>';
+  h+='<button class="btn sm primary" data-act="invite-new"'+(web.busy?' disabled':'')+'>Create a new-tree invite link</button></div>';
   var open=(invites||[]).filter(function(i){return !i.used;}),used=(invites||[]).filter(function(i){return i.used;});
   if(open.length){
     h+='<div class="acct-list">';
@@ -3700,38 +3714,67 @@ function acceptInvite(){
 }
 function acctReset(i){var a=accounts[i],inp=$('#rp-'+i);if(a) acctDo({action:'reset',name:a.name,password:inp?inp.value:''});}
 function acctRemove(i){var a=accounts[i];if(a) acctDo({action:'remove',name:a.name});}
-function accountsHTML(){
-  if(!WEB||!web.me||myRole()!=='editor') return '';
-  var ct=curTree();
-  /* Only the site owner manages access; other editors see who can open the tree and change their own password. */
-  if(!web.me.owner){
-    var h0='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>You can let more people <b>view</b> this tree, and choose which part of the family each viewer you added can see. Only the site owner can add editors, change someone’s role, set other people’s passwords, or remove people.</p>';
-    if(accounts) h0+='<div class="acct-list">'+accounts.map(function(a,i){return '<div class="acct"><div class="acct-who"><b>'+esc(a.name)+'</b><span class="role '+a.role+'">'+(a.role==='owner'?'Site owner':a.role==='editor'?'Editor':'Viewer')+'</span>'+(a.me?'<span class="note">you</span>':'')+(a.mine?'<span class="note">added by you</span>':'')+'</div>'+(a.mine&&a.role==='viewer'?'<div class="acct-do"><label class="check">Sees '+branchSelectHTML('data-act-change="acct-branch" data-i="'+i+'"'+(web.busy?' disabled':''),a.branch)+'</label></div>':'')+'</div>';}).join('')+'</div>';
-    h0+='<div class="sec" style="margin-top:18px"><b>Add a new viewer</b><div class="row acct-add"><input class="inp" id="ac-user" placeholder="Username" autocomplete="off"><input class="inp" id="ac-pw" type="password" placeholder="Password" autocomplete="new-password"><input type="hidden" id="ac-role" value="viewer"><label class="check">Sees '+branchSelectHTML('id="ac-branch"','')+'</label><button class="btn sm primary" data-act="acct-add"'+(web.busy?' disabled':'')+'>Add viewer</button></div></div>';
-    h0+='<div class="sec"><b>Let an existing user view this tree</b><p>Someone who already signs in to another family tree on this site.</p><div class="row acct-add"><input class="inp" id="ag-user" placeholder="Their username" autocomplete="off"><input type="hidden" id="ag-role" value="viewer"><label class="check">Sees '+branchSelectHTML('id="ag-branch"','')+'</label><button class="btn sm primary" data-act="acct-grant"'+(web.busy?' disabled':'')+'>Give viewing access</button></div></div>';
-    h0+='<div class="sec"><b>Your password</b><div class="row acct-add"><input class="inp" id="my-pw" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-mypw"'+(web.busy?' disabled':'')+'>Change my password</button></div></div>';
-    if(ui.acctErr) h0+='<p class="err">'+esc(ui.acctErr)+'</p>';
-    return h0;
+/* Settings → Sharing (website): who can open this tree, adding someone, and the address to send them.
+   One tidy row per person; "Manage" opens that person's settings (role, branch, password, remove) under it. */
+function roleWord(r){return r==='owner'?'Site owner':r==='editor'?'Editor':'Viewer';}
+function sharingHTML(){
+  var ct=curTree(),own=!!web.me.owner,url=location.origin+location.pathname,h='';
+  h+='<h3>Sharing</h3><p class="lead">Who can open “'+esc(ct?ct.name:data.meta.familyName)+'”, and how to send it to them.</p>';
+  /* 1 · the people */
+  h+='<div class="sec"><b>People who can open this tree'+(accounts?' <span class="cnt">'+accounts.length+'</span>':'')+'</b>';
+  if(!accounts) h+='<p class="note">Loading…</p>';
+  else{
+    h+='<div class="plist">';
+    accounts.forEach(function(a,i){
+      var canManage=own?true:(a.me||(a.mine&&a.role==='viewer')),open=ui.acctOpen===i;
+      var br=a.role==='viewer'&&a.branch&&P(a.branch)?'<span class="pl-br">Only the family of <bdi>'+esc(primaryText(P(a.branch)))+'</bdi></span>':'';
+      h+='<div class="prow'+(open?' open':'')+'"><div class="pr-main"><span class="pr-av" aria-hidden="true">'+esc((a.name||'?').charAt(0).toUpperCase())+'</span>';
+      h+='<div class="pr-who"><b>'+esc(a.name)+'</b>'+(a.me?' <span class="note">(you)</span>':'')+br+'</div>';
+      h+='<span class="role '+a.role+'">'+roleWord(a.role)+'</span>';
+      if(canManage) h+='<button class="btn sm" data-act="acct-open" data-i="'+i+'" aria-expanded="'+open+'">'+(open?'Done':'Manage')+'</button>';
+      h+='</div>';
+      if(open){
+        h+='<div class="pr-panel">';
+        /* what they can do */
+        if(own&&!a.me&&a.role!=='owner') h+='<div class="pr-line"><span class="flab">Can</span><div class="seg" role="group" aria-label="Role"><button data-act="acct-setrole" data-i="'+i+'" data-r="viewer" aria-pressed="'+(a.role==='viewer')+'"'+(web.busy?' disabled':'')+'>View</button><button data-act="acct-setrole" data-i="'+i+'" data-r="editor" aria-pressed="'+(a.role==='editor')+'"'+(web.busy?' disabled':'')+'>View and edit</button></div></div>';
+        /* which part of the family a viewer sees */
+        if(a.role==='viewer'&&(own||a.mine)) h+='<div class="pr-line"><label class="flab">Sees</label>'+branchSelectHTML('data-act-change="acct-branch" data-i="'+i+'"'+(web.busy?' disabled':''),a.branch)+'</div>';
+        /* a new password (their own, for anyone who isn't the owner) */
+        if(a.me) h+='<div class="pr-line"><label class="flab" for="my-pw">Password</label><input class="inp" id="my-pw" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-mypw"'+(web.busy?' disabled':'')+'>Change my password</button></div>';
+        else if(own) h+='<div class="pr-line"><label class="flab" for="rp-'+i+'">Password</label><input class="inp" id="rp-'+i+'" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-reset" data-i="'+i+'"'+(web.busy?' disabled':'')+'>Set password</button></div>';
+        /* take them off this tree */
+        if(own&&!a.me&&a.role!=='owner'){
+          h+='<div class="pr-line">'+(ui.rmAsk===i?'<span class="confirm">Remove '+esc(a.name)+' from this tree? <button class="btn sm danger" data-act="acct-remove" data-i="'+i+'">Remove</button><button class="btn sm ghost" data-act="acct-rm-no">Keep</button></span>'
+            :'<button class="btn sm ghost danger-txt" data-act="acct-rm-ask" data-i="'+i+'">Remove from this tree…</button>')+'</div>';
+        }
+        h+='</div>';
+      }
+      h+='</div>';
+    });
+    h+='</div>';
   }
-  var h='<h4 class="subh">People who can open “'+esc(ct?ct.name:'this tree')+'”</h4><p>Viewers can look at this tree (or only one branch of it, if you choose below). Editors can also change it. Each person has one username and password for every tree they belong to, and only you, the site owner, manage this list.</p>';
-  if(!accounts) return h+'<p class="note">Loading…</p>';
-  h+='<div class="acct-list">';
-  accounts.forEach(function(a,i){
-    h+='<div class="acct"><div class="acct-who"><b>'+esc(a.name)+'</b><span class="role '+a.role+'">'+(a.role==='owner'?'Site owner':a.role==='editor'?'Editor':'Viewer')+'</span>'+(a.me?'<span class="note">you</span>':'')+'</div>';
-    h+='<div class="acct-do"><input class="inp" id="rp-'+i+'" type="password" autocomplete="new-password" placeholder="New password"><button class="btn sm" data-act="acct-reset" data-i="'+i+'"'+(web.busy?' disabled':'')+'>'+(a.me?'Change my password':'Set password')+'</button>';
-    if(!a.me&&a.role!=='owner') h+='<button class="btn sm ghost" data-act="acct-role" data-i="'+i+'"'+(web.busy?' disabled':'')+'>'+(a.role==='editor'?'Make viewer':'Make editor')+'</button>';
-    if(a.role==='viewer'){
-      /* a viewer can be limited to one person's branch: that person, their parents, everyone below them */
-      h+='<label class="check" title="Limit what this viewer can see">Sees '+branchSelectHTML('data-act-change="acct-branch" data-i="'+i+'"'+(web.busy?' disabled':''),a.branch)+'</label>';
-    }
-    if(ui.rmAsk===i) h+='<span class="confirm">Remove '+esc(a.name)+' from this tree? <button class="btn sm danger" data-act="acct-remove" data-i="'+i+'">Remove</button><button class="btn sm ghost" data-act="acct-rm-no">Keep</button></span>';
-    else if(!a.me&&a.role!=='owner') h+='<button class="btn sm ghost" data-act="acct-rm-ask" data-i="'+i+'">Remove</button>';
-    h+='</div></div>';
-  });
-  h+='</div><div class="sec" style="margin-top:18px"><b>Add a new person</b><p>They sign in with this username and password.</p><div class="row acct-add"><input class="inp" id="ac-user" placeholder="Username" autocomplete="off"><input class="inp" id="ac-pw" type="password" placeholder="Password" autocomplete="new-password"><select class="sel" id="ac-role"><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button class="btn sm primary" data-act="acct-add"'+(web.busy?' disabled':'')+'>Add person</button></div></div>';
-  h+='<div class="sec"><b>Give an existing user access</b><p>Someone who already signs in to another family tree on this site.</p><div class="row acct-add"><input class="inp" id="ag-user" placeholder="Their username" autocomplete="off"><select class="sel" id="ag-role"><option value="viewer">Viewer</option><option value="editor">Editor</option></select><button class="btn sm primary" data-act="acct-grant"'+(web.busy?' disabled':'')+'>Give access</button></div></div>';
+  if(!own) h+='<p class="note">You can add viewers and choose what the viewers you added can see. The site owner manages editors, other people’s passwords and removing people.</p>';
+  h+='</div>';
+  /* 2 · add someone */
+  var ex=ui.addMode==='existing',role=own?(ui.addRole||'viewer'):'viewer';
+  h+='<div class="sec">';
+  if(!ui.addOpen) h+='<div class="row" style="margin:0"><button class="btn sm primary" data-act="add-open">+ Add someone</button></div>';
+  else{
+    h+='<b>Add someone</b><div class="pr-line"><div class="seg" role="group" aria-label="Their account"><button data-act="add-mode" data-m="new" aria-pressed="'+!ex+'">New username</button><button data-act="add-mode" data-m="existing" aria-pressed="'+ex+'">They already have one</button></div></div>';
+    if(ex) h+='<p class="note" style="margin-top:4px">Someone who already signs in to another family tree on this site.</p>';
+    var p=ex?'ag':'ac';
+    h+='<div class="addf"><div class="field"><label for="'+p+'-user">'+(ex?'Their username':'Username')+'</label><input class="inp" id="'+p+'-user" autocomplete="off" autocapitalize="off" spellcheck="false"></div>';
+    if(!ex) h+='<div class="field"><label for="ac-pw">Password</label><input class="inp" id="ac-pw" type="password" autocomplete="new-password"></div>';
+    h+='</div><input type="hidden" id="'+p+'-role" value="'+role+'">';
+    if(own) h+='<div class="pr-line"><span class="flab">Can</span><div class="seg" role="group" aria-label="Role"><button data-act="add-role" data-r="viewer" aria-pressed="'+(role==='viewer')+'">View</button><button data-act="add-role" data-r="editor" aria-pressed="'+(role==='editor')+'">View and edit</button></div></div>';
+    h+='<div class="pr-line add-br"'+(role==='viewer'?'':' hidden')+'><label class="flab" for="'+p+'-branch">Sees</label>'+branchSelectHTML('id="'+p+'-branch"','')+'</div>';
+    h+='<div class="row"><button class="btn sm primary" data-act="'+(ex?'acct-grant':'acct-add')+'"'+(web.busy?' disabled':'')+'>'+(ex?'Give access':'Add')+'</button><button class="btn sm ghost" data-act="add-close">Cancel</button></div>';
+  }
   if(ui.acctErr) h+='<p class="err">'+esc(ui.acctErr)+'</p>';
-  h+='<p class="note">Removing someone or setting a new password takes effect straight away. Someone removed from their only family tree can no longer sign in.</p>';
+  h+='</div>';
+  /* 3 · the address to send */
+  h+='<div class="sec"><b>Send them the link</b><p>Send each person this address, with their username and password.</p><div class="row"><span class="copyable invite-link">'+esc(url)+'</span><button class="btn sm" data-act="copy-url">Copy address</button></div>';
+  h+='<div class="row"><button class="btn sm ghost" data-act="preview">Preview what viewers see</button></div></div>';
   return h;
 }
 function webFooter(){
@@ -3875,7 +3918,16 @@ document.addEventListener('click',function(e){
     case 'acct-add':acctAdd();break;
     case 'acct-grant':acctGrant();break;
     case 'acct-mypw':acctMyPw();break;
-    case 'acct-role':acctRole(+t.dataset.i);break;
+    case 'acct-setrole':acctSetRole(+t.dataset.i,t.dataset.r);break;
+    case 'acct-open':var ai=+t.dataset.i;ui.acctOpen=ui.acctOpen===ai?null:ai;ui.rmAsk=null;ui.acctErr='';render();break;
+    case 'add-open':ui.addOpen=true;ui.addMode='new';ui.addRole='viewer';ui.acctErr='';render();var au=$('#ac-user');if(au) au.focus();break;
+    case 'add-close':ui.addOpen=false;ui.acctErr='';render();break;
+    case 'add-mode':ui.addMode=t.dataset.m;ui.acctErr='';render();var au2=$(ui.addMode==='existing'?'#ag-user':'#ac-user');if(au2) au2.focus();break;
+    case 'add-role':
+      /* in place, so what's been typed stays */
+      ui.addRole=t.dataset.r;var rr=$('#ac-role')||$('#ag-role');if(rr) rr.value=ui.addRole;
+      t.parentNode.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(b===t));});
+      var ab=$('.add-br');if(ab) ab.hidden=ui.addRole!=='viewer';break;
     case 'tree-new':newTree();break;
     case 'tree-open':switchTree(t.dataset.id);break;
     case 'invite-new':makeInvite();break;

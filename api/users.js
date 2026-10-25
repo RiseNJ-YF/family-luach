@@ -39,7 +39,7 @@ module.exports = wrap(async (req, res) => {
   if (b.action === 'add') {
     const bad = validNew(b.name, b.password);
     if (bad) return send(res, 400, { error: bad });
-    if (target) return send(res, 400, { error: 'There’s already an account called “' + String(b.name).trim() + '”. To give it access, use “Give an existing user access”.' });
+    if (target) return send(res, 400, { error: 'There’s already an account called “' + String(b.name).trim() + '”. To give it access, choose “They already have one” under Add someone.' });
     const nu = { name: String(b.name).trim(), key, trees: { [id]: role }, ver: 1, ...hashPw(String(b.password)) };
     if (!me.owner) nu.by = { [id]: me.key };
     if (role === 'viewer' && b.person) nu.branch = { [id]: String(b.person) };
