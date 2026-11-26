@@ -2320,7 +2320,9 @@ function render1(fam, opt) {
     if (!placed) problems.push('limb ' + fam2.name);
     addName(rn, COL_TRUNK_TEXT, 'child', b.id, fam2.name); if (rs) addName(rs, COL_SPOUSE, 'spouse', b.id, fam2.spouse);
     b.sNames = s0 + sp; b.sLast = s0 + sp; var s1 = rn.s1, old = b.wraw;
-    b.wraw = function (q) { return Math.max(old(q), WN * smooth((s1 + 150 - q) / 110)); };
+    /* past its name the limb narrows steadily toward its tip (no shoulder after the name) */
+    var q0 = s1 + 8, exw = Math.max(0, WN - old(q0)), Dt = Math.max(220, b.Ldn - q0);
+    b.wraw = function (q) { return q <= q0 ? Math.max(old(q), WN) : old(q) + exw * Math.pow(Math.max(0, 1 - (q - q0) / Dt), 1.2); };
   });
   boughs.forEach(function (b) { b.shape = strip(b.path, b.wraw); });
 
