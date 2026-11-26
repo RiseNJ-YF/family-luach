@@ -2257,6 +2257,15 @@ function render1(fam, opt) {
     var Ld = 150 + sp + 250 + (64 * c.nk + 46 * c.gg) * S, tight = 150 + sp + 250 + (50 * c.nk + 36 * c.gg) * S;
     return {th: th, need: Ld, tight: tight, g: gShape(th), w: Math.max(36, Math.min(118, 34 + 4 * c.nk + 1.6 * c.gg, 20 + Ld / 20)), c: c};
   });
+  // The outline is not one smooth dome: going up each side from the lowest limb, the limbs are by turns longer and shorter,
+  // so the crown has lobes with bays between them. Both sides start the same way (the tree stays balanced), whichever way
+  // suits the families' sizes better.
+  var LOBE = opt.lobes === undefined ? [1.1, 0.86] : opt.lobes;
+  if (LOBE && N >= 4) {
+    var sideL = [1, -1].map(function (sg) { return sk.filter(function (b) { return sg > 0 ? b.th < 80 : b.th > 100; }).sort(function (a, b) { return Math.abs(90 - b.th) - Math.abs(90 - a.th); }); });
+    var cost = [0, 1].map(function (ph) { var m = 0; sideL.forEach(function (l) { l.forEach(function (b, k) { m = Math.max(m, b.tight / (b.g * LOBE[(k + ph) % 2])); }); }); return m; }), ph0 = cost[1] < cost[0] * 0.97 ? 1 : 0;
+    sideL.forEach(function (l) { l.forEach(function (b, k) { b.lobe = LOBE[(k + ph0) % 2]; b.g *= b.lobe; }); });
+  }
   var RR = Math.max.apply(null, sk.map(function (b) { return b.tight / b.g; }));
   sk.forEach(function (b) { b.Ldn = Math.min(b.g * RR, b.need + 700) * U(0.96, 1.03); b.Ld = Math.max(b.need, b.Ldn) * 1.45; b.grow = true; });
   var maxL = Math.max.apply(null, sk.map(function (b) { return b.Ld; }));
@@ -2267,11 +2276,26 @@ function render1(fam, opt) {
   // where each limb leaves the trunk: steeper limbs higher up, one below the other on each side
   var bySide = {'1': [], '-1': []};
   sk.forEach(function (b) { b.sg = b.th < 80 ? 1 : b.th > 100 ? -1 : 0; if (b.sg) bySide[b.sg].push(b); else b.y = Y_TOP + 40; });
-  var yLow = Y_TOP + 40;
+  var yLow = Y_TOP + 40, stk = {};
   [1, -1].forEach(function (sg) {
     var l = bySide[sg].slice().sort(function (a, b) { return Math.abs(90 - a.th) - Math.abs(90 - b.th); }), y = 0;
-    l.forEach(function (b, k) { y = k ? y + (b.c.spouse ? 112 : 82) + 0.25 * (b.w - 36) : Y_TOP + 55 + 2.4 * Math.min(45, Math.abs(90 - b.th)); b.y = y; if (y > yLow) yLow = y; });
+    l.forEach(function (b, k) { b.step = k ? (b.c.spouse ? 112 : 82) + 0.25 * (b.w - 36) : 0; y = k ? y + b.step : Y_TOP + 55 + 2.4 * Math.min(45, Math.abs(90 - b.th)); b.y = y; });
+    stk[sg] = l;
   });
+  // the limbs leave the trunk at the same heights on both sides: the same top and the same bottom, and where the two sides
+  // can pair up, limb for limb. The side with fewer limbs is spaced wider, on the heights of the other side.
+  if (opt.level !== false && stk[1].length && stk[-1].length) {
+    var mA = stk[1].length >= stk[-1].length ? stk[1] : stk[-1], mB = mA === stk[1] ? stk[-1] : stk[1], nA = mA.length, nB = mB.length, yTop = Math.max(mA[0].y, mB[0].y), yy = yTop;
+    if (nA === nB) mA.forEach(function (b, k) { yy = k ? yy + Math.max(b.step, mB[k].step) : yTop; b.y = yy; mB[k].y = yy; });
+    else {
+      mA.forEach(function (b, k) { yy = k ? yy + b.step : yTop; b.y = yy; });
+      mB.forEach(function (b, k) {
+        var f = nB > 1 ? k * (nA - 1) / (nB - 1) : (nA - 1) * Math.max(0, Math.min(1, (Math.abs(90 - b.th) - Math.abs(90 - mA[0].th)) / Math.max(1, Math.abs(90 - mA[nA - 1].th) - Math.abs(90 - mA[0].th)))), i0 = Math.min(nA - 2, Math.floor(f));
+        b.y = nA > 1 ? mA[i0].y + (mA[i0 + 1].y - mA[i0].y) * (f - i0) : yTop; if (k) b.y = Math.max(b.y, mB[k - 1].y + b.step);
+      });
+    }
+  }
+  sk.forEach(function (b) { if (b.sg && b.y > yLow) yLow = b.y; });
   var trunkLen80 = Math.max.apply(null, [0].concat(rootNames.map(function (t) { return textLen(t, 80); })));
   var avail = Math.max(364 * TF, Math.min(560, trunkLen80 * 0.9 * TF)), zoneB = yLow + 118, Y_BASE = Math.round(Math.max(zoneB + avail + 96, Y_TOP + 900 * TF)), zoneA = Y_BASE - 96;
   avail = zoneA - zoneB; var H_ = Y_BASE + 460, TL = Y_BASE - Y_TOP;
@@ -2501,6 +2525,11 @@ function render1(fam, opt) {
   var TOP = ['#5f7f45', '#6f8f4f', '#557642', '#7b9a58', '#4d6e45', '#688a55', '#83a05c', '#5a7d52'], UNDER = ['#a9b98c', '#b8c59b', '#9db087', '#c3cda6'];
   var DEEP = ['#3d5a38', '#46653d', '#37523a', '#4f6d44', '#415e4a'], LIGHT = ['#93b266', '#a2bd72', '#89a95c', '#b0c884'];
   var leavesBack = [], leavesFront = [], spurs = [], olives = [], leavesDeep = [], leavesTop = [], spurTips = [], grid = {}, FREE = false;
+  function leavesNear(x, y, r) {
+    var n = 0, c = Math.ceil(r / 13), ix = Math.floor(x / 13), iy = Math.floor(y / 13);
+    for (var dx = -c; dx <= c; dx++) for (var dy = -c; dy <= c; dy++) if (dx * dx + dy * dy <= c * c) n += grid[(ix + dx) + ':' + (iy + dy)] || 0;
+    return n;
+  }
   function clump(x, y) { return sin(x / 205 + 1.1 + seed) * cos(y / 180 + 0.3) + 0.6 * sin(x / 101 - y / 127 + 2 + seed); }
   function leafShape(base, ang, ln, pal, rib) {
     var wd = ln * U(0.125, 0.185), curl = U(-0.3, 0.3), c = cos(ang), s = sin(ang);
@@ -2562,6 +2591,8 @@ function render1(fam, opt) {
     [1, -1].forEach(function (sd) { spur(p, b.Lf - U(20, 60), 3, sd); });
     var s = 170;
     while (s < b.Lf - 20) { var o = sides(); if (!spur(p, s, b.wdraw(s) / 2, o[0])) spur(p, s, b.wdraw(s) / 2, o[1]); s += U(40, 72); }
+    // the end of a limb is a full head of leaves, not a thin finger: twiglets on both sides along its last stretch
+    if (opt.fullEnds !== false) { s = Math.max(b.sLast + 60, b.Lf - U(250, 330)); while (s < b.Lf - 12) { [1, -1].forEach(function (sd) { spur(p, s + U(-8, 8), b.wdraw(s) / 2, sd); }); s += U(30, 44); } }
   });
   // depth: dark sprays behind the clumps, and a few large light leaves catching the sun in front
   spurTips.forEach(function (st) {
@@ -2573,6 +2604,12 @@ function render1(fam, opt) {
         if (ptext.hit(strip(dp, function () { return 3; }), 6)) continue;
         var end = dp.at(DL);
         if (!(50 < end[0] && end[0] < W_ - 50 && 50 < end[1] && end[1] < Y_BASE - 50)) continue;
+        // the dark sprays are shade behind the leaves: one that would reach out past the foliage, into the open, is left out
+        if (opt.deepInside !== false) {
+          var ccy = Y_TOP + 120, st0 = dp.at(0), rOut = Math.hypot(end[0] - CX, end[1] - ccy) - Math.hypot(st0[0] - CX, st0[1] - ccy), ox = end[0] + (end[0] - st0[0]) * 0.5, oy = end[1] + (end[1] - st0[1]) * 0.5;
+          if (rOut > 0 && leavesNear(ox, oy, 58) < 4) continue;
+          var open_ = false; [0.5, 0.75, 1].forEach(function (u) { var q = dp.at(DL * u); if (leavesNear(q[0], q[1], 46) < 2) open_ = true; }); if (open_) continue;
+        }
         leavesDeep.push('<path fill="#4a4030" fill-opacity="0.7" d="' + outlineD(dp, function (q) { return 2.6 - 1.6 * q / DL; }, 0, null, 24) + '"/>');
         var q_ = U(4, 10), l;
         while (q_ < DL) {
@@ -2663,6 +2700,38 @@ function render1(fam, opt) {
     for (var q = 0; q < 2; q++) { var fr = U(-0.5, 0.5); barkLine(rp, sOut(rp, RL), RL * U(0.5, 0.8), (function (fr) { return function (s) { return fr * 26 * (1 - s / RL); }; })(fr), U(1.4, 2.4), R() < 0.6); }
   });
 
+  // no bare patches inside the crown: where the wood has no leaf near it (the stems are kept clear up to their names, and
+  // packed names leave no room for a twiglet), small sprigs grow off the side of the stem or limb into the gap.
+  // The stem itself stays clear, so it can still be followed back to its limb.
+  var filled = 0;
+  if (opt.fill !== false) {
+    var sprigOff = function (parent, s, half, sd, lat, big) {
+      var th = rad(U(36, 62)), a0 = parent.ang(s) + sd * th, off = (half + 6.5) / sin(th), p0 = parent.at(s), nr = parent.nrm(s);
+      var dUp = (((-PI / 2 - a0 + PI) % (2 * PI)) + 2 * PI) % (2 * PI) - PI;
+      var sp = arcPath([p0[0] + nr[0] * lat, p0[1] + nr[1] * lat], a0, (big ? U(72, 104) : U(40, 70)) + off, copysign(U(0.08, 0.4), dUp)), SL = sp.L;
+      var wf = function (q) { return (big ? 3 : 2.6) - 1.7 * q / SL; };
+      if (ptext.hit(strip(sp, wf, off + 1), 2.5) || pwood.hit(strip(sp, wf, off + 7), 0)) return false;
+      var e = sp.at(SL); if (!(60 < e[0] && e[0] < W_ - 60 && 60 < e[1] && e[1] < Y_BASE - 60)) return false;
+      var log = leafy(sp, off + 7, SL, big ? 0.8 : 0.66);
+      if (log.length < (big ? 6 : 3)) { undo(log); return false; }
+      spurs.push(outlineD(sp, wf, 0, null, 16)); filled++; return true;
+    };
+    var fillAlong = function (path, sa, sb, halfFn, latFn) {
+      var s = sa + U(0, 14);
+      while (s < sb) {
+        var p = path.at(s), nr = path.nrm(s), o = sides();
+        for (var k = 0; k < 2; k++) {
+          var sd = o[k], lat = latFn ? latFn(s) : 0, d = lat + sd * (halfFn(s) + 42);
+          if (leavesNear(p[0] + nr[0] * d, p[1] + nr[1] * d, 44) > 1) continue;
+          for (var t = 0; t < 6 && !sprigOff(path, s + U(-6, 6), halfFn(s), sd, lat, t < 3); t++);
+        }
+        s += U(24, 34);
+      }
+    };
+    shoots.forEach(function (sh) { if (!sh.bare) fillAlong(sh.path, sh.hw + 16, Math.min(sh.L, sh.res.s1 + 6), function (q) { return sh.wf(q) / 2; }); });
+    boughs.forEach(function (b) { fillAlong(b.path, Math.max(150, b.sNames || 0), b.Lf - 20, function (q) { return b.wdraw(q) / 2; }, b.lat); });
+  }
+
   // ---------------------------------------------------------------- the picture
   var ex = [1e9, 1e9, -1e9, -1e9]; names.forEach(function (n) { var b = n.shape.bb; if (b[0] < ex[0]) ex[0] = b[0]; if (b[1] < ex[1]) ex[1] = b[1]; if (b[2] > ex[2]) ex[2] = b[2]; if (b[3] > ex[3]) ex[3] = b[3]; });
   var lx0 = ex[0], lx1 = ex[2], ly0 = ex[1]; leavesFront.concat(leavesBack).forEach(function (l) { var c = l[1]; if (c[0] < lx0) lx0 = c[0]; if (c[0] > lx1) lx1 = c[0]; if (c[1] < ly0) ly0 = c[1]; });
@@ -2694,7 +2763,7 @@ function render1(fam, opt) {
   o.push('</g><g>' + sprig.join('') + '</g><g>');
   names.forEach(function (n) { o.push('<path fill="' + n.col + '" data-role="' + n.role + '" d="' + n.glyphs.join('') + '"/>'); });
   o.push('</g></svg>');
-  return {svg: o.join(''), width: VW, height: VH, missing: missing, problems: problems, drawn: names.map(function (n) { return [n.role, n.text]; }), stats: {limbs: boughs.map(function (b, i) { return [Math.round(sk[i].th), Math.round(b.Ldn), Math.round(b.Lf), Math.round(b.sNames), b.fam.nk]; }), top: Y_TOP, base: Y_BASE, leaves: leavesFront.length + leavesBack.length, twiglets: spurs.length, seed: seed, scale: S}};
+  return {svg: o.join(''), width: VW, height: VH, missing: missing, problems: problems, drawn: names.map(function (n) { return [n.role, n.text]; }), stats: {limbs: boughs.map(function (b, i) { return [Math.round(sk[i].th), Math.round(b.Ldn), Math.round(b.Lf), Math.round(b.sNames), b.fam.nk]; }), top: Y_TOP, base: Y_BASE, leaves: leavesFront.length + leavesBack.length, twiglets: spurs.length, filled: filled, seed: seed, scale: S}};
 
 }
 
