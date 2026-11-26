@@ -2297,7 +2297,7 @@ function render1(fam, opt) {
   function shapeInCanvas(sh) { return sh.bb[0] > CB[0] && sh.bb[2] < CB[2] && sh.bb[1] > CB[1] && sh.bb[3] < CB[3]; }
 
   var boughs = sk.map(function (B, i) {
-    var y0 = B.y, sg = B.sg, x0 = trunkCx(y0), th = B.th, elev = th <= 90 ? th : 180 - th, lift = (16 * Math.max(0, Math.min(1.3, 1 - elev / 45)) + U(0, 6)) * (th <= 90 ? 1 : -1);
+    var y0 = B.y, sg = B.sg, x0 = trunkCx(y0), th = B.th, elev = th <= 90 ? th : 180 - th, lift = ((opt.arch || 16) * Math.max(0, Math.min(1.3, 1 - elev / (opt.arch ? 55 : 45))) + U(0, 6)) * (th <= 90 ? 1 : -1);
     var pre = sg ? [[trunkCx(y0 + 105) + sg * 6, y0 + 105], [x0 + sg * 26, y0 + 6]] : [[trunkCx(y0 + 150), y0 + 150], [x0, y0]], pts = pre.slice(), chord = B.Ld - (sg ? 105 : 150);
     for (var k = 1; k <= 4; k++) { var u = k / 4, ph0 = rad(th + lift * (1 - u) * (N === 1 ? 0 : 1)), r = chord * u * (1 - 0.03 * (1 - u)); pts.push([x0 + r * cos(ph0), y0 - r * sin(ph0)]); }
     var raw = new Path(crPoints(pts)), ph = U(0, 6.28), pp = [];
@@ -2305,7 +2305,7 @@ function render1(fam, opt) {
     var path = new Path(pp), w0 = B.w, Ld = path.L, ph2 = U(0, 6.28);
     var b = {i: i, id: 'L' + (i + 1), fam: B.c, path: path, Ld: Ld, Ldn: B.Ldn, grow: B.grow, sLast: 0}, Lt = B.Ldn * 1.12;
     b.wraw = function (s) { return (6 + (w0 - 6) * Math.pow(Math.max(0, 1 - s / Lt), 1.15)) * (1 + 0.07 * sin(s / 43 + ph2) + 0.04 * sin(s / 17 + 2.3 * ph2)); };
-    b.obsEnd = Math.min(Ld, B.Ldn * 1.04); b.shape = strip(path, b.wraw, 0, b.obsEnd); return b;
+    b.obsEnd = Math.min(Ld, B.Ldn * 1.04); b.lat = function () { return 0; }; b.shape = strip(path, b.wraw, 0, b.obsEnd); return b;
   });
 
   var names = [], problems = [], missing = [];
@@ -2318,9 +2318,9 @@ function render1(fam, opt) {
   boughs.forEach(function (b) {
     var fam2 = b.fam, path = b.path; if (!fam2.name) { b.sNames = 150; b.sLast = 150; return; }
     var others = boughs.filter(function (o) { return o !== b; }).map(function (o) { return o.shape; }).concat([trunkShape]);
-    var ln = textLen(fam2.name, FS_IN), ls = fam2.spouse ? textLen(fam2.spouse, FS_SPOUSE) : 0, sp = Math.max(ln, ls), s0 = Math.max(120, sOut(path, b.Ld) + 26), rn, rs, placed = false;
+    var ln = textLen(fam2.name, FS_IN), ls = fam2.spouse ? textLen(fam2.spouse, FS_SPOUSE) : 0, sp = Math.max(ln, ls), so = sOut(path, b.Ld), CK = (opt.collar || 0) + (opt.collarKids || 0) * Math.min(10, fam2.nk + 0.4 * fam2.gg), CL = opt.collarLen || 50, CU = opt.buttress || 0, low = path.tan(so)[0] > 0 ? 1 : -1, s0 = Math.max(120, so + 26 + (CK || CU ? 40 : 0)), rn, rs, placed = false;
     while (true) {
-      var fo = readsOut(path, s0 + sp - ln / 2), hw = WN / 2 * 1.06;
+      var fo = readsOut(path, s0 + sp - ln / 2), hw = WN / 2 * 1.06 * (1 + (CK + CU) * Math.exp(-Math.max(0, s0 + sp - ls - so + 14) / CL));
       rn = placeOn(path, fam2.name, FS_IN, s0 + sp - ln, fo, -0.31 * FS_IN);
       rs = fam2.spouse ? placeOn(path, fam2.spouse, FS_SPOUSE, s0 + sp - ls, fo, -(hw + 0.80 * FS_SPOUSE)) : null;
       var cand = rs ? [rn, rs] : [rn], bad = false;
@@ -2331,12 +2331,18 @@ function render1(fam, opt) {
     }
     if (!placed) problems.push('limb ' + fam2.name);
     addName(rn, COL_TRUNK_TEXT, 'child', b.id, fam2.name); if (rs) addName(rs, COL_SPOUSE, 'spouse', b.id, fam2.spouse);
-    b.sNames = s0 + sp; b.sLast = s0 + sp; var s1 = rn.s1, old = b.wraw;
+    b.sNames = s0 + sp; b.sLast = s0 + sp; b.sN0 = s0 + sp - Math.max(ln, ls); var s1 = rn.s1, old = b.wraw;
     /* past its name the limb narrows steadily toward its tip (no shoulder after the name) */
     var q0 = s1 + 8, exw = Math.max(0, WN - old(q0)), Dt = Math.max(220, b.Ldn - q0);
     b.wraw = function (q) { return q <= q0 ? Math.max(old(q), WN) : old(q) + exw * Math.pow(Math.max(0, 1 - (q - q0) / Dt), 1.2); };
+    /* a collar: the limb swells where it joins the trunk (the fork itself stays a sharp V) */
+    if (CK || CU) {
+      var w1 = b.wraw, cf = function (q) { return Math.exp(-Math.max(0, q - so + 14) / CL); };
+      b.wraw = function (q) { return w1(q) * (1 + (CK + CU / 2) * cf(q)); };
+      if (CU) b.lat = function (q) { return low * w1(q) * CU / 4 * cf(q); };          /* the extra goes on the underside */
+    }
   });
-  boughs.forEach(function (b) { b.obsEnd = Math.min(b.Ld, Math.max(b.obsEnd, b.sNames + 120)); b.shape = strip(b.path, b.wraw, 0, b.obsEnd); });
+  boughs.forEach(function (b) { b.obsEnd = Math.min(b.Ld, Math.max(b.obsEnd, b.sNames + 120)); b.shape = strip(b.path, b.wraw, 0, b.obsEnd, b.lat); });
 
   // ---------------------------------------------------------------- grandchildren: side shoots alternating along the limb; their children on twigs off the shoot
   var branches = boughs.map(function (b) { return {owner: b.id, shape: b.shape}; }).concat([{owner: 'trunk', shape: trunkShape}]);
@@ -2373,11 +2379,11 @@ function render1(fam, opt) {
         for (var t = 0; t < 4; t++) {
           var fgs = [4, 46 * cos(ths[t])];
           for (var f = 0; f < 2; f++) {
-            var got = tryShoot(path, s, sds[a], ths[t], hw, kd.name, FS_TWIG, kd.spouse, U(70, 150) + (g ? 30 + 58 * g : 0), fgs[f], 6.6 + Math.min(8, 1.2 * g));
+            var got = tryShoot(path, s, sds[a], ths[t], hw, kd.name, FS_TWIG, kd.spouse, U(70, 150) + (g ? 30 + 58 * g : 0), fgs[f], 6.6 + Math.min(8, 1.2 * g) + (opt.boldStems ? 2.4 : 0));
             if (!got) continue;
             got.sd = sds[a]; got.id = tid; got.owner = b.id; got.tipFrom = got.res.s1 + 12;
             var n0 = names.length, b0 = branches.length, sh0 = shoots.length;
-            shoots.push(got); branches.push({owner: tid, shape: got.body}); addName(got.res, COL_INK, 'grandchild', tid, kd.name);
+            shoots.push(got); branches.push({owner: tid, shape: got.body}); addName(got.res, (opt.altInk && b.i % 2) ? '#3b2f7a' : COL_INK, 'grandchild', tid, kd.name);
             if (got.sres) addName(got.sres, COL_SPOUSE, 'spouse', tid, kd.spouse);
             var ok = true, s2 = Math.max(got.res.s1, got.sres ? got.sres.s1 : 0) + 14, sd2 = choice([1, -1]);
             for (var gi = 0; gi < g && ok; gi++) {
@@ -2415,16 +2421,18 @@ function render1(fam, opt) {
   });
   // A limb with no grandchildren (or a long empty end) would stand out as a bare pole: it gets leafy side branches of its own,
   // like the shoots on the other limbs but without names, so it blends into the crown.
+  var PALE = !!opt.paleExtras, XMODE = opt.extras || 'all';
   function bareShoot(parent, s, sd, hw) {
-    var theta = rad(U(34, 56)), a0 = parent.ang(s) + sd * theta, L = U(190, 350), w0 = U(4.6, 6.2);
+    var theta = rad(U(34, 56)), a0 = parent.ang(s) + sd * theta, L = PALE ? U(120, 215) : U(190, 350), w0 = PALE ? U(3.2, 4.2) : U(4.6, 6.2);
     var dUp = (((-PI / 2 - a0 + PI) % (2 * PI)) + 2 * PI) % (2 * PI) - PI, bend = Math.abs(dUp) > 0.3 ? copysign(U(0.10, 0.34), dUp) : U(-0.15, 0.15);
     var sp = arcPath(parent.at(s), a0, L, bend);
     if (!inCanvas(sp.at(L))) return null;
     var wf = function (q) { return w0 + (2.0 - w0) * Math.pow(q / L, 0.9); }, start = Math.min(L - 20, (hw + 4) / sin(theta) + 3), body = strip(sp, wf, start, L);
     if (hitsText(body, 9) || branchHit(body, 2.5)) return null;
-    return {path: sp, L: L, wf: wf, body: body, hw: hw, s: s, sd: sd, tipFrom: start + 8, bare: true};
+    return {path: sp, L: L, wf: wf, body: body, hw: hw, s: s, sd: sd, tipFrom: start + 8, bare: true, pale: PALE};
   }
   boughs.forEach(function (b) {
+    if (XMODE === 'none' || (XMODE === 'childless' && b.fam.nk)) return;
     var s = b.sLast + (b.fam.nk ? U(100, 140) : U(45, 75)), end = Math.min(b.obsEnd, b.Ldn) - 110, side = choice([1, -1]), n = 0;
     while (s < end) {
       var got = null, hw = b.wraw(s) / 2;
@@ -2436,8 +2444,34 @@ function render1(fam, opt) {
   boughs.forEach(function (b) {
     b.Lf = Math.min(b.Ld, b.obsEnd, Math.max(b.sLast + U(200, 290), b.Ldn * U(0.95, 1.0)));
     b.wdraw = function (s) { return b.wraw(s) * (0.28 + 0.72 * smooth((b.Lf - s) / 170)); };
-    b.fin = strip(b.path, b.wdraw, 0, b.Lf);
+    b.fin = strip(b.path, b.wdraw, 0, b.Lf, b.lat);
   });
+
+  // Rounded corners where a limb meets the trunk: a small web of wood in the corner under the limb (and, if asked, above it).
+  // The fork between two limbs is left alone.
+  var webs = [];
+  if (opt.fillet || opt.filletTop) {
+    var edgePt = function (b, q, side, inset) { var p = b.path.at(q), n = b.path.nrm(q), h = Math.max(0, b.wdraw(q) / 2 - (inset || 0)), l = b.lat(q) + side * h; return [p[0] + n[0] * l, p[1] + n[1] * l]; };
+    var inTrunk = function (p) { return p[1] > Y_TOP && p[1] < Y_BASE && Math.abs(p[0] - trunkCx(p[1])) < trunkHalfY(p[1]); };
+    var J = [];
+    boughs.forEach(function (b, i) {
+      var sg = sk[i].sg; if (!sg) return;
+      var n0 = b.path.nrm(120), under = (n0[1] + 0.5 * sg * n0[0]) >= 0 ? 1 : -1;
+      [under, -under].forEach(function (side, k) {
+        var q = 0; while (q < 400 && inTrunk(edgePt(b, q, side))) q += 4; if (q === 0 || q >= 400) return;
+        var lo = q - 4, hi = q; for (var it = 0; it < 6; it++) { var md = (lo + hi) / 2; if (inTrunk(edgePt(b, md, side))) lo = md; else hi = md; }
+        J.push({b: b, sg: sg, side: side, under: k === 0, s: hi, P: edgePt(b, hi, side)});
+      });
+    });
+    J.forEach(function (j) {
+      var R = j.under ? (opt.fillet || 0) : (opt.filletTop || 0); if (!R) return;
+      var dir = j.under ? 1 : -1, avail = j.under ? (Y_BASE - 330 - j.P[1]) : (j.P[1] - Y_TOP - 8);
+      J.forEach(function (o) { if (o.b === j.b || o.sg !== j.sg) return; var d = (o.P[1] - j.P[1]) * dir; if (d > 0 && d < avail) avail = d; });
+      var dT = Math.min(R, 0.9 * avail), dL = Math.min(R, j.under ? 0.85 * ((j.b.sN0 || 300) - j.s) : 220); if (dT < 7 || dL < 7) return;
+      var yA = j.P[1] + dir * dT, A = [trunkCx(yA) + j.sg * trunkHalfY(yA), yA], Ai = [A[0] - j.sg * 14, yA], B = edgePt(j.b, j.s + dL, j.side), Bi = edgePt(j.b, j.s + dL, j.side, 14), Pi = [j.P[0] - j.sg * 16, j.P[1] - dir * 4];
+      webs.push('M' + P2(A) + ' Q' + P2(j.P) + ' ' + P2(B) + ' L' + P2(Bi) + ' L' + P2(Pi) + ' L' + P2(Ai) + 'Z');
+    });
+  }
 
   // ---------------------------------------------------------------- roots, trunk names, family name
   var roots = [], rootDef = [[-190, 400, 96, 40], [-132, 230, 140, 30], [-66, 100, 164, 24], [4, -16, 176, 22], [72, -122, 160, 24], [136, -258, 134, 30], [192, -420, 88, 40]];
@@ -2468,6 +2502,8 @@ function render1(fam, opt) {
 
   // ---------------------------------------------------------------- foliage: olive leaves in pairs, on every branch, inside the crown too
   var ptext = new Index(90); names.forEach(function (n) { ptext.add(n.shape, 6.5); });
+  // keep the leaves off each named shoot from the limb to its name, so the eye can follow it back to the limb
+  if (opt.boldStems) shoots.forEach(function (sh) { if (!sh.bare) ptext.add(strip(sh.path, sh.wf, sh.hw, Math.min(sh.L, sh.res.s1 + 6)), 2.5); });
   var pwood = new Index(90); boughs.forEach(function (b) { pwood.add(b.fin); }); shoots.forEach(function (s) { pwood.add(s.body); }); pwood.add(trunkShape);
   var TOP = ['#5f7f45', '#6f8f4f', '#557642', '#7b9a58', '#4d6e45', '#688a55', '#83a05c', '#5a7d52'], UNDER = ['#a9b98c', '#b8c59b', '#9db087', '#c3cda6'];
   var DEEP = ['#3d5a38', '#46653d', '#37523a', '#4f6d44', '#415e4a'], LIGHT = ['#93b266', '#a2bd72', '#89a95c', '#b0c884'];
@@ -2625,9 +2661,9 @@ function render1(fam, opt) {
   });
   boughs.forEach(function (b) {
     var p = b.path, wf = b.wdraw, Lf = b.Lf, so = sOut(p, Lf), sg = p.tan(Lf * 0.5)[0] > 0 ? 1 : -1;
-    barkLine(p, Math.max(Lf * 0.05, so), Lf * 0.9, function (s) { return sg * 0.455 * wf(s); }, 2.5, true);
+    barkLine(p, Math.max(Lf * 0.05, so), Lf * 0.9, function (s) { return sg * 0.455 * wf(s) + b.lat(s); }, 2.5, true);
     var n = 3 + Math.floor(b.wraw(0) / 20);
-    for (var q = 0; q < n; q++) { var fr = choice([-1, 1]) * U(0.76, 0.9), a = Math.max(so, U(0, 0.5) * Lf), e = Math.min(Lf * 0.93, a + U(0.2, 0.45) * Lf); barkLine(p, a, e, (function (fr) { return function (s) { return fr * wf(s) / 2; }; })(fr), U(1.3, 2.4), R() < 0.6); }
+    for (var q = 0; q < n; q++) { var fr = choice([-1, 1]) * U(0.76, 0.9), a = Math.max(so, U(0, 0.5) * Lf), e = Math.min(Lf * 0.93, a + U(0.2, 0.45) * Lf); barkLine(p, a, e, (function (fr) { return function (s) { return fr * wf(s) / 2 + b.lat(s); }; })(fr), U(1.3, 2.4), R() < 0.6); }
   });
   roots.forEach(function (r) {
     var rp = r.path, RL = rp.L;
@@ -2651,9 +2687,10 @@ function render1(fam, opt) {
   o.push('<g fill="url(#ot-bark)">');
   o.push(spurs.map(function (d) { return '<path d="' + d + '"/>'; }).join(''));
   o.push(roots.map(function (r) { return '<path d="' + outlineD(r.path, r.wf) + '"/>'; }).join(''));
-  o.push(shoots.map(function (s) { return '<path d="' + outlineD(s.path, s.wf, 0, null, 26) + '"/>'; }).join(''));
+  o.push(shoots.map(function (s) { return '<path' + (s.bare ? (s.pale ? ' fill="#8f8b63"' : '') : (opt.boldStems ? ' fill="#5d4631"' : '')) + ' d="' + outlineD(s.path, s.wf, 0, null, 26) + '"/>'; }).join(''));
   o.push('<path d="' + outlineD(tpath, twFn, 0, null, 40) + '"/>');
-  o.push(boughs.map(function (b) { return '<path d="' + outlineD(b.path, b.wdraw, 0, b.Lf) + '"/>'; }).join(''));
+  o.push(boughs.map(function (b) { return '<path d="' + outlineD(b.path, b.wdraw, 0, b.Lf, 30, b.lat) + '"/>'; }).join(''));
+  o.push(webs.map(function (d) { return '<path d="' + d + '"/>'; }).join(''));
   o.push('</g>');
   o.push('<g>' + strands.join('') + '</g><g>' + bark.join('') + '</g><g>' + grass.join('') + '</g><g>' + spatter.join('') + '</g>');
   o.push('<g>' + leavesFront.map(function (l) { return l[0]; }).join('') + '</g><g>' + leavesTop.join('') + '</g><g>');
@@ -2669,11 +2706,13 @@ function render1(fam, opt) {
 }
 
 function render(fam, opt) {
-  opt = opt || {}; var best = null, sd = opt.seed || 8, tries = [[sd, 1], [sd + 11, 1], [sd + 23, 1.15], [sd + 37, 1.3], [sd + 41, 1.5], [sd + 53, 1.8], [sd + 67, 2.2], [sd + 71, 2.7]];
+  opt = opt || {};
+  /* the look chosen for the site: bold named stems, pale sprays only on a limb with no grandchildren, slightly rounded corners at the trunk */
+  var DEF = {extras: 'childless', paleExtras: true, boldStems: true, fillet: 22, filletTop: 22}, o0 = {}, kk; for (kk in DEF) o0[kk] = DEF[kk]; for (kk in opt) o0[kk] = opt[kk]; opt = o0; var best = null, sd = opt.seed || 8, tries = [[sd, 1], [sd + 11, 1], [sd + 23, 1.15], [sd + 37, 1.3], [sd + 41, 1.5], [sd + 53, 1.8], [sd + 67, 2.2], [sd + 71, 2.7]];
   var t0 = Date.now();
   for (var i = 0; i < tries.length; i++) {
     if (best && Date.now() - t0 > 10000) break;
-    var r = render1(fam, {seed: tries[i][0], scale: tries[i][1], light: opt.light});
+    var o1 = {}; for (var k in opt) o1[k] = opt[k]; o1.seed = tries[i][0]; o1.scale = tries[i][1]; var r = render1(fam, o1);
     var bad = r.missing.length * 10 + r.problems.length; if (!best || bad < best.bad) { best = r; best.bad = bad; }
     if (!best.bad) break;
   }
