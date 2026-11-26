@@ -2257,9 +2257,9 @@ function render1(fam, opt) {
   var wts = kids.map(function (c) { return 1 + 0.12 * c.nk + 0.05 * c.gg; }), wsum = wts.reduce(function (a, b) { return a + b; }, 0);
   var lo = Math.max(-14, Math.min(45, 48 - 8 * N)), spanP = N > 1 ? (180 - 2 * lo) * N / (N - 1) : 0, loP = lo - spanP / (2 * N), acc0 = 0;
   // A rounded crown: limbs are longest going out sideways, shorter going up and where they droop.
-  function gShape(th) { var e = th <= 90 ? th : 180 - th; return e >= 0 ? 1.08 - 0.34 * Math.pow(sin(rad(e)), 1.5) : 1.08 - 0.9 * sin(rad(-e)); }
+  function gShape(th) { var e = th <= 90 ? th : 180 - th; return e >= 0 ? 1.04 - 0.17 * Math.pow(sin(rad(e)), 1.5) : 1.04 - 0.45 * sin(rad(-e)); }       // halfway between every limb the same length (pointed) and a full dome
   var sk = kids.map(function (c, i) {
-    var raw = loP + spanP * (acc0 + wts[i] / 2) / wsum, ph = (raw - 90) / (90 - loP), th = N === 1 ? 90 + U(-3, 3) : 90 + (90 - loP) * (ph < 0 ? -1 : 1) * Math.pow(Math.abs(ph), 0.85) + U(-2, 2); acc0 += wts[i];
+    var raw = loP + spanP * (acc0 + wts[i] / 2) / wsum, ph = (raw - 90) / (90 - loP), th = N === 1 ? 90 + U(-3, 3) : 90 + (90 - loP) * (ph < 0 ? -1 : 1) * Math.pow(Math.abs(ph), 0.925) + U(-2, 2); acc0 += wts[i];
     var ln = textLen(c.name, FS_IN), ls = c.spouse ? textLen(c.spouse, FS_SPOUSE) : 0, sp = Math.max(ln, ls);
     var Ld = 150 + sp + 250 + (64 * c.nk + 46 * c.gg) * S, tight = 150 + sp + 250 + (50 * c.nk + 36 * c.gg) * S;
     return {th: th, need: Ld, tight: tight, g: gShape(th), w: Math.max(36, Math.min(118, 34 + 4 * c.nk + 1.6 * c.gg, 20 + Ld / 20)), c: c};
