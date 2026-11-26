@@ -1987,7 +1987,7 @@ function oliveFamily(root){
   }
   var ids=kidsOf(root); if(sq) kidsOf(sq.id).forEach(function(k){if(ids.indexOf(k)<0) ids.push(k);});
   var kids=ids.map(function(k){return kid(k,1);});
-  if(!heb) kids.reverse();                                   /* English: oldest on the left; Hebrew: oldest on the right */
+  if(!heb) kids.reverse();                                   /* the children go round the crown by age: Hebrew from the right (counter-clockwise), English from the left */
   function par(p){ if(!p) return []; var q=parentsOf(p); return [q.father?oliveNm(q.father):(heb?(p.fatherHeb||'').trim():''),q.mother?oliveNm(q.mother):(heb?(p.motherHeb||'').trim():'')]; }
   var last=heb?((a.hebLast||'').trim()||(b&&(b.hebLast||'').trim())||''):((a.last||'').trim()||(b&&(b.last||'').trim())||'');
   var sname=!sq&&sp&&sp.name?sp.name:'';
@@ -2253,7 +2253,7 @@ function render1(fam, opt) {
 
   // ---------------------------------------------------------------- skeleton: limbs fan out by age, oldest at the right, youngest at the left
   var span = Math.min(235, 60 + 25 * N) * (N === 1 ? 0 : 1), mid = 94 + (N > 2 ? U(-4, 4) : 0);
-  var wts = kids.map(function (c) { return 1 + 0.25 * c.nk + 0.10 * c.gg; }), wsum = wts.reduce(function (a, b) { return a + b; }, 0), acc0 = mid - span / 2;
+  var wts = kids.map(function (c) { return 1 + 0.12 * c.nk + 0.05 * c.gg; }), wsum = wts.reduce(function (a, b) { return a + b; }, 0), acc0 = mid - span / 2;
   var sk = kids.map(function (c, i) {
     var wd = span * wts[i] / wsum, th = acc0 + wd / 2; acc0 += wd;
     var ln = textLen(c.name, FS_IN), ls = c.spouse ? textLen(c.spouse, FS_SPOUSE) : 0, sp = Math.max(ln, ls);
@@ -2261,6 +2261,9 @@ function render1(fam, opt) {
     return {th: th, Ldn: Ld, Ld: Ld * 1.45, w: Math.max(36, Math.min(118, 34 + 4 * c.nk + 1.6 * c.gg, 20 + Ld / 20)), c: c};
   });
   if (N === 1) sk[0].th = 90 + U(-3, 3);
+  // an even crown: a child with few or no children still gets a limb that reaches most of the way out, in leaf
+  var maxN = Math.max.apply(null, sk.map(function (b) { return b.Ldn; }));
+  sk.forEach(function (b) { var t = Math.min(0.9 * maxN, b.Ldn + 680) * U(0.93, 1.05); if (b.Ldn < t) { b.grow = true; b.Ldn = t; b.Ld = Math.max(b.Ld, t * 1.2); } });
   var maxL = Math.max.apply(null, sk.map(function (b) { return b.Ld; }));
   var reachX = Math.max.apply(null, sk.map(function (b) { return Math.abs(cos(rad(b.th))) * b.Ld + 250 * Math.abs(sin(rad(b.th))); })), reachUp = Math.max.apply(null, sk.map(function (b) { return Math.max(0, sin(rad(b.th))) * b.Ld + 200; }));
   var TF = Math.max(0.58, Math.min(1.12, Math.max.apply(null, sk.map(function (b) { return b.Ldn; })) / 1180));
@@ -2272,7 +2275,7 @@ function render1(fam, opt) {
   var yLow = Y_TOP + 40;
   [1, -1].forEach(function (sg) {
     var l = bySide[sg].slice().sort(function (a, b) { return Math.abs(90 - a.th) - Math.abs(90 - b.th); }), y = 0;
-    l.forEach(function (b, k) { y = k ? y + 95 + 0.65 * b.w : Y_TOP + 55 + 2.4 * Math.min(45, Math.abs(90 - b.th)); b.y = y; if (y > yLow) yLow = y; });
+    l.forEach(function (b, k) { y = k ? y + (b.c.spouse ? 112 : 82) + 0.25 * (b.w - 36) : Y_TOP + 55 + 2.4 * Math.min(45, Math.abs(90 - b.th)); b.y = y; if (y > yLow) yLow = y; });
   });
   var trunkLen80 = Math.max.apply(null, [0].concat(rootNames.map(function (t) { return textLen(t, 80); })));
   var avail = Math.max(364 * TF, Math.min(560, trunkLen80 * 0.9 * TF)), zoneB = yLow + 118, Y_BASE = Math.round(Math.max(zoneB + avail + 96, Y_TOP + 900 * TF)), zoneA = Y_BASE - 96;
@@ -2298,7 +2301,7 @@ function render1(fam, opt) {
     var raw = new Path(crPoints(pts)), ph = U(0, 6.28), pp = [];
     for (k = 0; k <= Math.floor(raw.L / 4); k++) { var s = Math.min(raw.L, k * 4), wv = (6.5 * sin(s / 78 + ph) + 3.2 * sin(s / 31 + 2 * ph)) * smooth((s - 150) / 160), p = raw.at(s), nr = raw.nrm(s); pp.push([p[0] + nr[0] * wv, p[1] + nr[1] * wv]); }
     var path = new Path(pp), w0 = B.w, Ld = path.L, ph2 = U(0, 6.28);
-    var b = {i: i, id: 'L' + (i + 1), fam: B.c, path: path, Ld: Ld, Ldn: B.Ldn, sLast: 0}, Lt = B.Ldn * 1.12;
+    var b = {i: i, id: 'L' + (i + 1), fam: B.c, path: path, Ld: Ld, Ldn: B.Ldn, grow: B.grow, sLast: 0}, Lt = B.Ldn * 1.12;
     b.wraw = function (s) { return (6 + (w0 - 6) * Math.pow(Math.max(0, 1 - s / Lt), 1.15)) * (1 + 0.07 * sin(s / 43 + ph2) + 0.04 * sin(s / 17 + 2.3 * ph2)); };
     b.shape = strip(path, b.wraw); return b;
   });
@@ -2405,7 +2408,7 @@ function render1(fam, opt) {
     });
   });
   boughs.forEach(function (b) {
-    b.Lf = Math.min(b.Ld, b.sLast + U(200, 290));
+    b.Lf = Math.min(b.Ld, Math.max(b.sLast + U(200, 290), b.grow ? b.Ldn : 0));
     b.wdraw = function (s) { return b.wraw(s) * (0.28 + 0.72 * smooth((b.Lf - s) / 170)); };
     b.fin = strip(b.path, b.wdraw, 0, b.Lf);
   });
@@ -2728,7 +2731,7 @@ function viewTree(){
   h+='<button class="btn sm" data-act="zoom" data-z="-1" aria-label="Zoom out">−</button><span class="btn sm num zoom-pct" id="zoom-pct">'+Math.round(ui.zoom*100)+'%</span><button class="btn sm" data-act="zoom" data-z="1" aria-label="Zoom in">+</button><button class="btn sm" data-act="zoom" data-z="0">Fit</button></div></div>';
   if(ui.areaSel) h+='<div class="area-banner" role="status"><b>Choose the area to print</b><span>Drag a box over the part of the tree you want. Scroll or pinch to zoom; on a phone, two fingers move the tree.</span><div class="ab-btns"><button class="btn sm" data-act="area-whole">Whole tree</button><button class="btn sm ab-x" data-act="area-cancel" aria-label="Cancel" title="Cancel">✕</button></div></div>';
   h+='<div class="tree-wrap'+useTreeStyle(ui.treeStyle)+(ui.areaSel?' selecting':'')+'" id="tree-wrap"><div id="tree-zoom" style="zoom:'+ui.zoom+'">'+treeMarkup(root)+'</div></div>';
-  if(ui.treeLayout==='olive') h+='<p class="note" style="margin-top:8px">Scroll or pinch to zoom, drag to move around. The couple is on the trunk and each child is a limb, with the husband or wife beside it. Grandchildren are on the side shoots and great-grandchildren, in blue, on the twigs.</p>';
+  if(ui.treeLayout==='olive') h+='<p class="note" style="margin-top:8px">Scroll or pinch to zoom, drag to move around. The couple is on the trunk and each child is a limb, with the husband or wife beside it. The children go round the crown in age order. Grandchildren are on the side shoots and great-grandchildren, in blue, on the twigs.</p>';
   else h+='<p class="note" style="margin-top:8px">Scroll or pinch to zoom, drag to move around, tap anyone for their details. Each marriage is shown, with its children hanging from that marriage’s ⚭. A 2nd marriage’s line is dashed, a 3rd dotted, a 4th double; gray means divorced.</p>';
   return h;
 }
