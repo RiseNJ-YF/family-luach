@@ -2406,6 +2406,26 @@ function render1(fam, opt) {
       b.sLast = Math.max(b.sLast, got.s); sMin = got.s + (U(46, 78) + 26 * kd.kids.length) * b.spread; side = -got.sd;
     });
   });
+  // A limb with no grandchildren (or a long empty end) would stand out as a bare pole: it gets leafy side branches of its own,
+  // like the shoots on the other limbs but without names, so it blends into the crown.
+  function bareShoot(parent, s, sd, hw) {
+    var theta = rad(U(34, 56)), a0 = parent.ang(s) + sd * theta, L = U(190, 350), w0 = U(4.6, 6.2);
+    var dUp = (((-PI / 2 - a0 + PI) % (2 * PI)) + 2 * PI) % (2 * PI) - PI, bend = Math.abs(dUp) > 0.3 ? copysign(U(0.10, 0.34), dUp) : U(-0.15, 0.15);
+    var sp = arcPath(parent.at(s), a0, L, bend);
+    if (!inCanvas(sp.at(L))) return null;
+    var wf = function (q) { return w0 + (2.0 - w0) * Math.pow(q / L, 0.9); }, start = Math.min(L - 20, (hw + 4) / sin(theta) + 3), body = strip(sp, wf, start, L);
+    if (hitsText(body, 9) || branchHit(body, 2.5)) return null;
+    return {path: sp, L: L, wf: wf, body: body, hw: hw, s: s, sd: sd, tipFrom: start + 8, bare: true};
+  }
+  boughs.forEach(function (b) {
+    var s = b.sLast + (b.fam.nk ? U(100, 140) : U(45, 75)), end = Math.min(b.obsEnd, b.Ldn) - 110, side = choice([1, -1]), n = 0;
+    while (s < end) {
+      var got = null, hw = b.wraw(s) / 2;
+      for (var t = 0; t < 6 && !got; t++) got = bareShoot(b.path, s, t % 2 ? -side : side, hw);
+      if (got) { got.id = b.id + '_x' + (++n); got.owner = b.id; shoots.push(got); branches.push({owner: got.id, shape: got.body}); side = -got.sd; s += U(70, 115); }
+      else s += 28;
+    }
+  });
   boughs.forEach(function (b) {
     b.Lf = Math.min(b.Ld, b.obsEnd, Math.max(b.sLast + U(200, 290), b.Ldn * U(0.95, 1.0)));
     b.wdraw = function (s) { return b.wraw(s) * (0.28 + 0.72 * smooth((b.Lf - s) / 170)); };
