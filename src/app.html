@@ -2217,7 +2217,22 @@ function render1(fam, opt) {
       glyphs.push(d);
       var B = g.b; quads.push(mkPiece([[B[0], B[1]], [B[2], B[1]], [B[2], B[3]], [B[0], B[3]]].map(function (v) { return [ox + a * v[0] + cc * v[1], oy + b * v[0] + dd * v[1]]; })));
     }
-    return {glyphs: glyphs, shape: mkShape(quads, 2.5), s0: sA, s1: sA + Ltot};
+    /* the same name as live text: its baseline, running the way the eye reads the glyph shapes (left to right on screen) */
+    var base = null;
+    if (opt.liveText) {
+      var ext = 0.5 * Ltot + 40, nb = Math.max(4, Math.ceil((Ltot + 2 * ext) / 14)), bp = [];
+      var atExt = function (q) { var qq = Math.max(0, Math.min(path.L, q)), p = path.at(qq), t = path.tan(qq); return [[p[0] + t[0] * (q - qq), p[1] + t[1] * (q - qq)], t]; };
+      for (var bi = 0; bi <= nb; bi++) {
+        var u = bi / nb, q = flowOut ? sA + Ltot + ext - (Ltot + 2 * ext) * u : sA - ext + (Ltot + 2 * ext) * u, pe = atExt(q), tf = flowOut ? pe[1] : [-pe[1][0], -pe[1][1]];
+        bp.push([pe[0][0] - tf[1] * offset, pe[0][1] + tf[0] * offset]);
+      }
+      base = {d: 'M' + bp.map(P2).join('L'), mid: f2(ext + Ltot / 2), fs: fs};
+      /* and as one straight line of text: along the chord of the name, moved half-way toward the curve */
+      var pt = function (q) { var e2 = atExt(q), t2 = flowOut ? e2[1] : [-e2[1][0], -e2[1][1]]; return [e2[0][0] - t2[1] * offset, e2[0][1] + t2[0] * offset]; };
+      var qa = flowOut ? sA + Ltot : sA, qb = flowOut ? sA : sA + Ltot, A0 = pt(qa), B0 = pt(qb), M0 = pt(sA + Ltot / 2);
+      base.x = f2(((A0[0] + B0[0]) / 2 + M0[0]) / 2); base.y = f2(((A0[1] + B0[1]) / 2 + M0[1]) / 2); base.ang = f2(Math.atan2(B0[1] - A0[1], B0[0] - A0[0]) * 180 / PI);
+    }
+    return {glyphs: glyphs, shape: mkShape(quads, 2.5), s0: sA, s1: sA + Ltot, base: base};
   }
   function placeOn(path, text, fs, sA, flowOut, offset, hand) {
     var tl = textLen(text, fs), ss = [], pts = [], sign = flowOut ? 1 : -1, end = Math.min(path.L, sA + tl * 1.7 + 80) + 0.01;
@@ -2255,7 +2270,7 @@ function render1(fam, opt) {
     var raw = loP + spanP * (acc0 + wts[i] / 2) / wsum, ph = (raw - 90) / (90 - loP), th = N === 1 ? 90 + U(-3, 3) : 90 + (90 - loP) * (ph < 0 ? -1 : 1) * Math.pow(Math.abs(ph), 0.925) + U(-2, 2); acc0 += wts[i];
     var ln = textLen(c.name, FS_IN), ls = c.spouse ? textLen(c.spouse, FS_SPOUSE) : 0, sp = Math.max(ln, ls);
     var Ld = 150 + sp + 250 + (64 * c.nk + 46 * c.gg) * S, tight = 150 + sp + 250 + (50 * c.nk + 36 * c.gg) * S;
-    return {th: th, need: Ld, tight: tight, g: gShape(th), w: Math.max(36, Math.min(118, 34 + 4 * c.nk + 1.6 * c.gg, 20 + Ld / 20)), c: c};
+    return {th: th, need: Ld, tight: tight, g: gShape(th), g0: gShape(th), wt: wts[i], w: Math.max(36, Math.min(118, 34 + 4 * c.nk + 1.6 * c.gg, 20 + Ld / 20)), c: c};
   });
   // The outline is not one smooth dome: going up each side from the lowest limb, the limbs are by turns longer and shorter,
   // so the crown has lobes with bays between them. Both sides start the same way (the tree stays balanced), whichever way
@@ -2299,17 +2314,32 @@ function render1(fam, opt) {
   var trunkLen80 = Math.max.apply(null, [0].concat(rootNames.map(function (t) { return textLen(t, 80); })));
   var avail = Math.max(364 * TF, Math.min(560, trunkLen80 * 0.9 * TF)), zoneB = yLow + 118, Y_BASE = Math.round(Math.max(zoneB + avail + 96, Y_TOP + 900 * TF)), zoneA = Y_BASE - 96;
   avail = zoneA - zoneB; var H_ = Y_BASE + 460, TL = Y_BASE - Y_TOP;
-  function trunkCx(y) { return CX + 20 * sin((y - Y_TOP) / TL * 3.6 + 0.6) * smooth((y - Y_TOP) / 300) * smooth((Y_BASE - y) / 200); }
+  // the trunk sways only a little, so that neither edge pinches in; it is narrowest under the lowest limb and widens
+  // steadily from there down to the root flare, like a real trunk
+  var SWAY = opt.sway === undefined ? 7 : opt.sway, TAPER = opt.taper === undefined ? 36 : opt.taper, yNeck = yLow + 40;
+  function trunkCx(y) { return CX + SWAY * sin((y - Y_TOP) / TL * 3.6 + 0.6) * smooth((y - Y_TOP) / 300) * smooth((Y_BASE - y) / 200); }
   var TKN = [[0, 26], [90, 46], [200, 64], [340, 86], [490, 102]];
-  function trunkHalfY(y) {
+  var fork = null;
+  function trunkHalfY(y) { return fork && y < fork.cut ? 0 : trunkHalf0(y); }
+  function trunkHalf0(y) {
     var d = y - Y_TOP, e = Y_BASE - y, h;
     if (d <= 0) h = 26; else if (d >= 490) h = 102; else for (var i = 0; i < TKN.length - 1; i++) if (d <= TKN[i + 1][0]) { h = TKN[i][1] + (TKN[i + 1][1] - TKN[i][1]) * smooth((d - TKN[i][0]) / (TKN[i + 1][0] - TKN[i][0])); break; }
-    h = Math.min(h, 102); if (d > 60) h = h * (1 - (1 - TF) * smooth((d - 60) / 240)); if (e < 270 * TF) h = Math.max(h, TF * (104 + 28 * smooth((270 * TF - e) / (140 * TF)) + 82 * smooth((130 * TF - e) / (130 * TF))));
-    return h * (1 + 0.035 * sin(y / 29) + 0.02 * sin(y / 11 + 1));
+    h = Math.min(h, 102); if (d > 60) h = h * (1 - (1 - TF) * smooth((d - 60) / 240));
+    var wob = 1 + 0.035 * sin(y / 29) + 0.02 * sin(y / 11 + 1);
+    if (opt.trunkSweep !== false && TAPER) {
+      /* below the lowest limb the trunk is one clean sweep: a slight widening all the way down, and a flare that starts
+         high and gathers toward the ground like a real root flare. No ripples on the edges here. */
+      var below = smooth((y - yNeck) / 110), ee = Math.max(0, e) / TF;
+      h += TF * below * (TAPER * 0.45 * Math.pow(Math.min(1, Math.max(0, y - yNeck) / Math.max(1, Y_BASE - yNeck)), 1.15) + 104 * Math.exp(-ee / 92) + 26 * Math.exp(-ee / 270));
+      return h * (1 + (wob - 1) * (1 - below));
+    }
+    if (TAPER) { if (y > yNeck) h += TF * TAPER * Math.pow(Math.min(1, (y - yNeck) / Math.max(1, Y_BASE - yNeck)), 1.15); if (e < 270 * TF) h += TF * (20 * smooth((270 * TF - e) / (140 * TF)) + 70 * smooth((130 * TF - e) / (130 * TF))); }
+    else if (e < 270 * TF) h = Math.max(h, TF * (104 + 28 * smooth((270 * TF - e) / (140 * TF)) + 82 * smooth((130 * TF - e) / (130 * TF))));
+    return h * wob;
   }
   var tp = []; for (var k0 = 0; k0 <= 110; k0++) tp.push([trunkCx(Y_BASE - TL * k0 / 110), Y_BASE - TL * k0 / 110]);
   var tpath = new Path(tp); function twFn(s) { return 2 * trunkHalfY(Y_BASE - s); }
-  var trunkShape = strip(tpath, twFn), CB = [70, 70, W_ - 70, Y_BASE - 40];
+  var trunkShape = null, CB = [70, 70, W_ - 70, Y_BASE - 40];
   function inCanvas(p) { return p[0] > CB[0] && p[0] < CB[2] && p[1] > CB[1] && p[1] < CB[3]; }
   function shapeInCanvas(sh) { return sh.bb[0] > CB[0] && sh.bb[2] < CB[2] && sh.bb[1] > CB[1] && sh.bb[3] < CB[3]; }
 
@@ -2324,6 +2354,27 @@ function render1(fam, opt) {
     b.wraw = function (s) { return (6 + (w0 - 6) * Math.pow(Math.max(0, 1 - s / Lt), 1.15)) * (1 + 0.07 * sin(s / 43 + ph2) + 0.04 * sin(s / 17 + 2.3 * ph2)); };
     b.obsEnd = Math.min(Ld, B.Ldn * 1.04); b.lat = function () { return 0; }; b.shape = strip(path, b.wraw, 0, b.obsEnd); return b;
   });
+
+  // A fork: when no limb goes up the middle, the trunk does not run on above the two top limbs as a stump.
+  // It ends in the crotch between them: at the point where their inner edges part, and never lower than where a limb's
+  // underside leaves the trunk.
+  if (opt.fork !== false && !bare && !sk.some(function (k) { return k.sg === 0; })) {
+    var tops = [1, -1].map(function (sg) { var l = boughs.filter(function (b) { return sk[b.i].sg === sg; }); l.sort(function (a, b) { return sk[a.i].y - sk[b.i].y; }); return l[0]; });
+    if (tops[0] && tops[1]) {
+      var yC = -1e9, yP = 1e9;
+      tops.forEach(function (b) {
+        var wE = function (q) { return Math.max(b.wraw(q), b.fam.name ? WN : 0); }, sg = sk[b.i].sg, up = b.path.nrm(140)[1] < 0 ? 1 : -1, yCross = null, yExit = null;
+        for (var q = 0; q <= 330; q += 3) {
+          var p = b.path.at(q), n = b.path.nrm(q), h = wE(q) / 2, iu = [p[0] + n[0] * up * h, p[1] + n[1] * up * h], lw = [p[0] - n[0] * up * h, p[1] - n[1] * up * h];
+          if (yCross === null && (iu[0] - trunkCx(iu[1])) * sg >= 0) yCross = iu[1];
+          if (yExit === null && Math.abs(lw[0] - trunkCx(lw[1])) > trunkHalf0(lw[1])) yExit = lw[1];
+        }
+        if (yCross !== null && yCross > yC) yC = yCross; if (yExit !== null && yExit < yP) yP = yExit;
+      });
+      if (yC > -1e8 && yP < 1e8) { var cut = Math.min(yC + 10, yP - 6); fork = {cut: cut, apex: cut, R: 0, tops: tops, yC: yC, yP: yP}; }
+    }
+  }
+  trunkShape = strip(tpath, twFn);
 
   var names = [], problems = [], missing = [];
   function addName(res, col, role, owner, text) { res.col = col; res.role = role; res.owner = owner; res.text = text; names.push(res); return res; }
@@ -2480,8 +2531,22 @@ function render1(fam, opt) {
         J.push({b: b, sg: sg, side: side, under: k === 0, s: hi, P: edgePt(b, hi, side)});
       });
     });
+    if (fork) {
+      /* the crotch: a rounded web between the two limbs, like the corners at the trunk. Its lowest point is the crotch
+         itself, or just above the trunk's cut end if that is higher, so the cut end never shows. */
+      var yU = Math.min(fork.yC, fork.cut - 8), Rc = Math.max(10, (opt.filletTop || 14) * 1.5);
+      var cr = fork.tops.map(function (b) {
+        var up = b.path.nrm(140)[1] < 0 ? 1 : -1, q = 0, pt = edgePt(b, 0, up);
+        while (q < 330 && pt[1] > yU) { q += 2; pt = edgePt(b, q, up); }
+        q = Math.min(q + Rc, Math.max(q + 6, (b.sN0 || 300) - 12));
+        return {b: b, up: up, q: q, A: edgePt(b, q, up), Ai: edgePt(b, q, up, 14)};
+      });
+      var cxm = trunkCx(yU);
+      webs.push('M' + P2(cr[1].A) + ' Q' + P2([cxm, yU]) + ' ' + P2(cr[0].A) + ' L' + P2(cr[0].Ai) + ' L' + P2([cxm, fork.cut + 24]) + ' L' + P2(cr[1].Ai) + 'Z');
+    }
     J.forEach(function (j) {
       var R = j.under ? (opt.fillet || 0) : (opt.filletTop || 0); if (!R) return;
+      if (!j.under && fork && fork.tops.indexOf(j.b) >= 0) return;
       var dir = j.under ? 1 : -1, avail = j.under ? (Y_BASE - 330 - j.P[1]) : (j.P[1] - Y_TOP - 8);
       J.forEach(function (o) { if (o.b === j.b || o.sg !== j.sg) return; var d = (o.P[1] - j.P[1]) * dir; if (d > 0 && d < avail) avail = d; });
       var dT = Math.min(R, 0.9 * avail), dL = Math.min(R, j.under ? 0.85 * ((j.b.sN0 || 300) - j.s) : 220); if (dT < 7 || dL < 7) return;
@@ -2579,7 +2644,7 @@ function render1(fam, opt) {
     }
     return true;
   }
-  var tips = [];
+  var tips = [], deepKept = 0, deepDropped = 0;
   shoots.forEach(function (sh) {
     leafy(sh.path, sh.tipFrom, sh.L); tips.push(sh.path.at(sh.L));
     [1, -1].forEach(function (sd) { if (R() < 0.8) spur(sh.path, sh.L - U(18, 50), 2, sd); });
@@ -2607,9 +2672,10 @@ function render1(fam, opt) {
         // the dark sprays are shade behind the leaves: one that would reach out past the foliage, into the open, is left out
         if (opt.deepInside !== false) {
           var ccy = Y_TOP + 120, st0 = dp.at(0), rOut = Math.hypot(end[0] - CX, end[1] - ccy) - Math.hypot(st0[0] - CX, st0[1] - ccy), ox = end[0] + (end[0] - st0[0]) * 0.5, oy = end[1] + (end[1] - st0[1]) * 0.5;
-          if (rOut > 0 && leavesNear(ox, oy, 58) < 4) continue;
-          var open_ = false; [0.5, 0.75, 1].forEach(function (u) { var q = dp.at(DL * u); if (leavesNear(q[0], q[1], 46) < 2) open_ = true; }); if (open_) continue;
+          if (rOut > 0 && leavesNear(ox, oy, 58) < 4) { deepDropped++; continue; }
+          var open_ = false; [0.5, 0.75, 1].forEach(function (u) { var q = dp.at(DL * u); if (leavesNear(q[0], q[1], 46) < 2) open_ = true; }); if (open_) { deepDropped++; continue; }
         }
+        deepKept++;
         leavesDeep.push('<path fill="#4a4030" fill-opacity="0.7" d="' + outlineD(dp, function (q) { return 2.6 - 1.6 * q / DL; }, 0, null, 24) + '"/>');
         var q_ = U(4, 10), l;
         while (q_ < DL) {
@@ -2660,7 +2726,7 @@ function render1(fam, opt) {
     ptext = keepText;
   }
   // bark
-  var bark = [], strands = [];
+  var bark = [], strands = [], TLv = fork ? Math.min(TL, Y_BASE - fork.cut) : TL;        // the trunk's visible length
   function barkLine(path, a, e, lat, wmax, dark) {
     if (e - a < 12) return;
     bark.push('<path fill="' + (dark ? '#2b1c11' : '#ead9b6') + '" fill-opacity="' + f3(dark ? U(0.34, 0.6) : U(0.16, 0.3)) + '" d="' + outlineD(path, function (s) { return wmax * Math.pow(Math.max(0.08, sin(PI * (s - a) / (e - a))), 0.7); }, a, e, 34, lat) + '"/>');
@@ -2668,9 +2734,9 @@ function render1(fam, opt) {
   var colsHalf = rootNames.length > 1 ? COLGAP + 0.62 * FS_TRUNK + 16 : 0.4 * FS_TRUNK + 16;
   [[0, '#3a2819', 0.26], [2.1, '#d2ba92', 0.11], [4.2, '#3a2819', 0.2]].forEach(function (st) {
     var lat = function (s) { return 0.40 * twFn(s) / 2 * sin(2 * PI * s / 660 + st[0]); };
-    strands.push('<path fill="' + st[1] + '" fill-opacity="' + st[2] + '" d="' + outlineD(tpath, function (s) { return 0.56 * twFn(s) / 2 * smooth((TL * 0.86 - s) / 160) * smooth(s / 60) + 0.5; }, 0, TL * 0.86, 36, lat) + '"/>');
+    strands.push('<path fill="' + st[1] + '" fill-opacity="' + st[2] + '" d="' + outlineD(tpath, function (s) { return 0.56 * twFn(s) / 2 * smooth((TLv * 0.86 - s) / 160) * smooth(s / 60) + 0.5; }, 0, TLv * 0.86, 36, lat) + '"/>');
     for (var q = 0; q < 9; q++) {
-      var off = U(-0.2, 0.2), a = U(0, 0.62) * TL, e = Math.min(TL * 0.9, a + U(0.14, 0.4) * TL), latq = (function (off) { return function (s) { return lat(s) + off * twFn(s) / 2; }; })(off), skip = false;
+      var off = U(-0.2, 0.2), a = U(0, 0.62) * TLv, e = Math.min(TLv * 0.9, a + U(0.14, 0.4) * TLv), latq = (function (off) { return function (s) { return lat(s) + off * twFn(s) / 2; }; })(off), skip = false;
       if (rootNames.length && a < sTxt + tlT + 18 && e > sTxt - 18) { var mn = 1e9, u0 = Math.max(a, sTxt), u1 = Math.min(e, sTxt + tlT); for (var z = 0; z < 8; z++) mn = Math.min(mn, Math.abs(latq(u0 + (u1 - u0) * z / 7))); if (mn < colsHalf) skip = true; }
       if (skip) continue;
       barkLine(tpath, a, e, latq, U(1.8, 3.6), R() < 0.62);
@@ -2682,7 +2748,7 @@ function render1(fam, opt) {
   [-0.94, 0.94].forEach(function (fr) {
     var run = [];
     for (var q = 6; ; q += 6) {
-      var last = q >= TL * 0.9, inside = last;
+      var last = q >= TLv * 0.9, inside = last;
       if (!last) { var p = tpath.at(q), nr = tpath.nrm(q), h = fr * twFn(q) / 2; inside = mouths.hitPt(p[0] + nr[0] * h, p[1] + nr[1] * h); }
       if (!inside) { run.push(q); continue; }
       if (run.length > 8) barkLine(tpath, run[0] + 8, run[run.length - 1] - 8, function (s) { return fr * twFn(s) / 2; }, 4.2, true);
@@ -2703,7 +2769,7 @@ function render1(fam, opt) {
   // no bare patches inside the crown: where the wood has no leaf near it (the stems are kept clear up to their names, and
   // packed names leave no room for a twiglet), small sprigs grow off the side of the stem or limb into the gap.
   // The stem itself stays clear, so it can still be followed back to its limb.
-  var filled = 0;
+  var filled = 0, fillMarks = [];
   if (opt.fill !== false) {
     var sprigOff = function (parent, s, half, sd, lat, big) {
       var th = rad(U(36, 62)), a0 = parent.ang(s) + sd * th, off = (half + 6.5) / sin(th), p0 = parent.at(s), nr = parent.nrm(s);
@@ -2714,7 +2780,7 @@ function render1(fam, opt) {
       var e = sp.at(SL); if (!(60 < e[0] && e[0] < W_ - 60 && 60 < e[1] && e[1] < Y_BASE - 60)) return false;
       var log = leafy(sp, off + 7, SL, big ? 0.8 : 0.66);
       if (log.length < (big ? 6 : 3)) { undo(log); return false; }
-      spurs.push(outlineD(sp, wf, 0, null, 16)); filled++; return true;
+      spurs.push(outlineD(sp, wf, 0, null, 16)); filled++; fillMarks.push([sp.at(off), e]); return true;
     };
     var fillAlong = function (path, sa, sb, halfFn, latFn) {
       var s = sa + U(0, 14);
@@ -2740,7 +2806,7 @@ function render1(fam, opt) {
   vx0 = Math.max(0, fcx - hf); vx1 = Math.min(W_, fcx + hf);
   var VW = Math.round(vx1 - vx0), VH = Math.round((TITLE ? H_ : Y_BASE + 230) - vy0); vx0 = Math.round(vx0); vy0 = Math.round(vy0);
   var o = [];
-  o.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vx0 + ' ' + vy0 + ' ' + VW + ' ' + VH + '" width="' + VW + '" height="' + VH + '">');
+  o.push('<svg xmlns="http://www.w3.org/2000/svg"' + (opt.liveText ? ' xmlns:xlink="http://www.w3.org/1999/xlink"' : '') + ' viewBox="' + vx0 + ' ' + vy0 + ' ' + VW + ' ' + VH + '" width="' + VW + '" height="' + VH + '">');
   o.push('<defs><radialGradient id="ot-bark" gradientUnits="userSpaceOnUse" cx="' + Math.round(CX) + '" cy="' + (Y_BASE - 300) + '" r="1750"><stop offset="0" stop-color="#574130"/><stop offset="0.28" stop-color="#6f5540"/><stop offset="0.6" stop-color="#8a7055"/><stop offset="1" stop-color="#a38b6c"/></radialGradient></defs>');
   o.push('<rect x="' + vx0 + '" y="' + vy0 + '" width="' + VW + '" height="' + VH + '" fill="' + COL_BG + '"/>');
   o.push('<g>' + washes.join('') + '</g><g>' + ground.join('') + '</g>');
@@ -2750,7 +2816,7 @@ function render1(fam, opt) {
   o.push(spurs.map(function (d) { return '<path d="' + d + '"/>'; }).join(''));
   o.push(roots.map(function (r) { return '<path d="' + outlineD(r.path, r.wf) + '"/>'; }).join(''));
   o.push(shoots.map(function (s) { return '<path' + (s.bare ? (s.pale ? ' fill="#8f8b63"' : '') : (opt.boldStems ? ' fill="#5d4631"' : '')) + ' d="' + outlineD(s.path, s.wf, 0, null, 26) + '"/>'; }).join(''));
-  o.push('<path d="' + outlineD(tpath, twFn, 0, null, 40) + '"/>');
+  o.push('<path d="' + outlineD(tpath, function (q) { return 2 * trunkHalf0(Y_BASE - q); }, 0, fork ? Y_BASE - fork.cut : null, 40) + '"/>');      // at a fork the trunk stops under the crotch, behind the two limbs
   o.push(boughs.map(function (b) { return '<path d="' + outlineD(b.path, b.wdraw, 0, b.Lf, 30, b.lat) + '"/>'; }).join(''));
   o.push(webs.map(function (d) { return '<path d="' + d + '"/>'; }).join(''));
   o.push('</g>');
@@ -2761,9 +2827,41 @@ function render1(fam, opt) {
     o.push('<path fill="none" stroke="#6b5a3a" stroke-width="1.3" d="M' + P2(q) + ' Q' + f2((q[0] + x) / 2 + 3) + ',' + f2((q[1] + y) / 2) + ' ' + f2(x) + ',' + f2(y - 7) + '"/><ellipse cx="' + f2(x) + '" cy="' + f2(y) + '" rx="6.4" ry="8.4" fill="' + (ol[3] ? '#3f3347' : '#7c8a3c') + '"/><ellipse cx="' + f2(x - 2.2) + '" cy="' + f2(y - 2.6) + '" rx="1.8" ry="3" fill="#ffffff" fill-opacity="0.3"/>');
   });
   o.push('</g><g>' + sprig.join('') + '</g><g>');
+  if (opt.liveText === 'straight') {
+    /* names as real text, one straight line each: the form that other drawing programs keep as editable text */
+    names.forEach(function (n) {
+      var t = HEB.test(n.text) ? n.text : n.text.split('').reverse().join('');
+      o.push('<text transform="translate(' + n.base.x + ' ' + n.base.y + ') rotate(' + n.base.ang + ')" font-family="Bona Nova" font-weight="700" font-size="' + f2(n.base.fs) + '" letter-spacing="' + f3(TRACK * n.base.fs) + '" fill="' + n.col + '" text-anchor="middle">' + t.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</text>');
+    });
+  } else if (opt.liveText) {
+    /* names as real text set on a path, for editing in a drawing program. Needs the font Bona Nova (Bold) installed. */
+    var escT = function (t) { return t.replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
+    o.push('<defs>' + names.map(function (n, i) { return '<path id="ot-b' + i + '" d="' + n.base.d + '"/>'; }).join('') + '</defs>');
+    names.forEach(function (n, i) {
+      var t = HEB.test(n.text) ? n.text : n.text.split('').reverse().join('');
+      o.push('<text font-family="\'Bona Nova\', BonaNova-Bold, serif" font-weight="700" font-size="' + f2(n.base.fs) + '" letter-spacing="' + f3(TRACK * n.base.fs) + '" fill="' + n.col + '" text-anchor="middle" data-role="' + n.role + '"><textPath href="#ot-b' + i + '" xlink:href="#ot-b' + i + '" startOffset="' + n.base.mid + '">' + escT(t) + '</textPath></text>');
+    });
+  } else
   names.forEach(function (n) { o.push('<path fill="' + n.col + '" data-role="' + n.role + '" d="' + n.glyphs.join('') + '"/>'); });
   o.push('</g></svg>');
-  return {svg: o.join(''), width: VW, height: VH, missing: missing, problems: problems, drawn: names.map(function (n) { return [n.role, n.text]; }), stats: {limbs: boughs.map(function (b, i) { return [Math.round(sk[i].th), Math.round(b.Ldn), Math.round(b.Lf), Math.round(b.sNames), b.fam.nk]; }), top: Y_TOP, base: Y_BASE, leaves: leavesFront.length + leavesBack.length, twiglets: spurs.length, filled: filled, seed: seed, scale: S}};
+  var dbg = null;
+  if (opt.debug) {
+    var samp = function (path, L, step) { var out = [], n = Math.max(2, Math.ceil(L / step)); for (var i = 0; i <= n; i++) { var p = path.at(L * i / n); out.push([Math.round(p[0]), Math.round(p[1])]); } return out; };
+    var obox = function (n) {                       // an oriented box round a name
+      var q = n.shape.q; if (!q.length) return null; var c0 = [0, 0], c1 = [0, 0];
+      q[0].p.forEach(function (v) { c0[0] += v[0] / 4; c0[1] += v[1] / 4; }); q[q.length - 1].p.forEach(function (v) { c1[0] += v[0] / 4; c1[1] += v[1] / 4; });
+      var dx = c1[0] - c0[0], dy = c1[1] - c0[1], h = Math.hypot(dx, dy); if (h < 1) { dx = 1; dy = 0; h = 1; } dx /= h; dy /= h;
+      var a0 = 1e9, a1 = -1e9, b0 = 1e9, b1 = -1e9; q.forEach(function (pc) { pc.p.forEach(function (v) { var a = v[0] * dx + v[1] * dy, b = -v[0] * dy + v[1] * dx; if (a < a0) a0 = a; if (a > a1) a1 = a; if (b < b0) b0 = b; if (b > b1) b1 = b; }); });
+      return [[a0, b0], [a1, b0], [a1, b1], [a0, b1]].map(function (v) { return [Math.round(v[0] * dx - v[1] * dy), Math.round(v[0] * dy + v[1] * dx)]; });
+    };
+    dbg = {view: [vx0, vy0, VW, VH], N: N, bare: bare, lo: lo, RR: Math.round(RR), TF: TF, CX: Math.round(CX), top: Y_TOP, fork: fork ? Math.round(fork.cut) : null, forkC: fork ? [Math.round(fork.yC), Math.round(fork.yP)] : null, base: Y_BASE, yLow: Math.round(yLow), yNeck: Math.round(yNeck), zoneA: Math.round(zoneA), zoneB: Math.round(zoneB), fsTrunk: FS_TRUNK,
+      trunk: (function () { var out = []; for (var y = fork ? Math.ceil(fork.cut) : Y_TOP; y <= Y_BASE; y += 20) out.push([Math.round(trunkCx(y)), y, Math.round(trunkHalfY(y))]); return out; })(),
+      limbs: boughs.map(function (b, i) { var k = sk[i]; return {name: b.fam.name, spouse: b.fam.spouse, nk: b.fam.nk, gg: b.fam.gg, th: k.th, share: k.wt / wsum, g0: k.g0, lobe: k.lobe || 1, need: Math.round(k.need), tight: Math.round(k.tight), len: Math.round(b.Ldn), drawn: Math.round(b.Lf), w: Math.round(k.w), y: Math.round(k.y), sg: k.sg, sN0: Math.round(b.sN0 || 0), sN1: Math.round(b.sNames || 0), spread: b.spread, pts: samp(b.path, b.Lf, 40)}; }),
+      shoots: shoots.map(function (sh) { return {kind: sh.bare ? 'spray' : sh.gg ? 'twig' : 'shoot', owner: sh.owner, clear: sh.bare ? 0 : Math.round(Math.min(sh.L, sh.res.s1 + 6)), pts: samp(sh.path, sh.L, 30), clearPts: sh.bare ? null : samp(sh.path, Math.min(sh.L, sh.res.s1 + 6), 30)}; }),
+      roots: roots.map(function (r) { return samp(r.path, r.path.L, 50); }),
+      names: names.map(function (n) { return {role: n.role, box: obox(n)}; }), fill: fillMarks.map(function (f) { return [Math.round(f[0][0]), Math.round(f[0][1]), Math.round(f[1][0]), Math.round(f[1][1])]; }), deep: [deepKept, deepDropped]};
+  }
+  return {svg: o.join(''), width: VW, height: VH, dbg: dbg, missing: missing, problems: problems, drawn: names.map(function (n) { return [n.role, n.text]; }), stats: {limbs: boughs.map(function (b, i) { return [Math.round(sk[i].th), Math.round(b.Ldn), Math.round(b.Lf), Math.round(b.sNames), b.fam.nk]; }), top: Y_TOP, base: Y_BASE, leaves: leavesFront.length + leavesBack.length, twiglets: spurs.length, filled: filled, seed: seed, scale: S}};
 
 }
 
@@ -2775,7 +2873,7 @@ function render(fam, opt) {
   for (var i = 0; i < tries.length; i++) {
     if (best && Date.now() - t0 > 10000) break;
     var o1 = {}; for (var k in opt) o1[k] = opt[k]; o1.seed = tries[i][0]; o1.scale = tries[i][1]; var r = render1(fam, o1);
-    var bad = r.missing.length * 10 + r.problems.length; if (!best || bad < best.bad) { best = r; best.bad = bad; }
+    var bad = r.missing.length * 10 + r.problems.length; if (!best || bad < best.bad) { best = r; best.bad = bad; best.attempt = i; }
     if (!best.bad) break;
   }
   return best;
